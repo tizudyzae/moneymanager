@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 
 from flask import Flask, g, redirect, render_template, request, url_for
-from core import calculate_wages, money
+from core import DEFAULT_ACCOUNTS, DEFAULT_BILLS, build_sheet, calculate_wages, money
 
 DB_PATH = Path(os.environ.get("MONEY_MANAGER_DB", "/config/money_manager.db"))
 
@@ -80,14 +80,17 @@ def index():
     conn = db()
     accounts = conn.execute("SELECT * FROM accounts ORDER BY sort_order, id").fetchall()
     bills = conn.execute("SELECT * FROM bills ORDER BY sort_order, id").fetchall()
-    monthly_income = sum(account["balance"] for account in accounts)
-    outgoing = sum(bill["amount"] for bill in bills)
+    seed_accounts = DEFAULT_ACCOUNTS if not accounts else [dict(account) | {"months": {}} for account in accounts]
+    seed_bills = DEFAULT_BILLS if not bills else [dict(bill) | {"paid_months": []} for bill in bills]
+    sheet = build_sheet(seed_accounts, seed_bills)
+    monthly_income = sum(account["balance"] for account in seed_accounts)
+    outgoing = sum(bill["amount"] for bill in seed_bills)
     expenses = conn.execute("SELECT * FROM expenses ORDER BY spent_on DESC, id DESC LIMIT 20").fetchall()
     expense_total = conn.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM expenses").fetchone()["total"]
     weeks = conn.execute("SELECT * FROM wage_weeks ORDER BY week_start, id").fetchall()
     settings = conn.execute("SELECT * FROM wage_settings WHERE id = 1").fetchone()
     wages = calculate_wages(weeks, settings)
-    return render_template("index.html", accounts=accounts, bills=bills, monthly_income=monthly_income, outgoing=outgoing, left_to_pay=outgoing, leftover=monthly_income - outgoing, expenses=expenses, expense_total=expense_total, settings=settings, wages=wages, today=date.today().isoformat())
+    return render_template("index.html", accounts=seed_accounts, bills=seed_bills, sheet=sheet, monthly_income=monthly_income, outgoing=outgoing, left_to_pay=outgoing, leftover=monthly_income - outgoing, expenses=expenses, expense_total=expense_total, settings=settings, wages=wages, today=date.today().isoformat())
 
 
 @app.post("/accounts")
