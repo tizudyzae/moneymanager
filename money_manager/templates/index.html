@@ -3,71 +3,125 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Money Manager Spreadsheet</title>
+  <title>Untitled spreadsheet</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="sheet-header">
-    <div>
-      <p class="eyebrow">Untitled spreadsheet</p>
-      <h1>Nathan's Money Manager</h1>
-      <p>Built to mirror the Google Sheet: bank balances, month-by-month bills, left-to-pay totals, daily food/fuel, and wages.</p>
+  <header class="chrome">
+    <div class="titlebar">
+      <div class="sheets-icon">▰</div>
+      <span class="doc-title">Untitled spreadsheet</span>
+      <span class="star">☆</span>
+      <span class="cloud">☁</span>
+      <span class="version">v{{ version }}</span>
+      <button class="share">Share</button>
     </div>
-    <nav><a href="#budget">Budget</a><a href="#daily">Food/Fuel</a><a href="#wages">Wages</a></nav>
+    <nav class="menubar" aria-label="Google Sheets style menu">
+      <span>File</span><span>Edit</span><span>View</span><span>Insert</span><span>Format</span><span>Data</span><span>Tools</span><span>Extensions</span><span>Help</span>
+    </nav>
+    <div class="toolbar" aria-label="Spreadsheet toolbar">
+      <button>↶</button><button>↷</button><button>🖨</button><button>100%</button><button>£</button><button>%</button><button>.0</button><button>123</button>
+      <select><option>Trebuchet MS</option><option>Calibri</option></select><button>−</button><button>11</button><button>+</button><button><b>B</b></button><button><i>I</i></button><button>☰</button><button>Σ</button>
+    </div>
+    <div class="formula"><span id="name-box">A1</span><span class="fx">fx</span><input id="formula-input" aria-label="Formula bar"></div>
   </header>
 
-  <main>
-    <section class="toolbar" aria-label="Spreadsheet toolbar">
-      <span>File</span><span>Edit</span><span>View</span><span>Insert</span><span>Format</span><span>Data</span><span>Tools</span><span>Extensions</span><span>Help</span>
-    </section>
-
-    <section id="budget" class="sheet-card">
-      <div class="sheet-title"><h2>Copy of 2023</h2><span class="view-only">View only style, editable below</span></div>
-      <div class="spreadsheet-wrap">
-        <table class="spreadsheet budget-sheet">
-          <thead>
-            <tr><th class="corner"></th><th>A</th><th>B</th>{% for month in sheet.months %}<th>{{ loop.index + 2 }}</th>{% endfor %}</tr>
-            <tr><th>1</th><th>Account / outgoing</th><th>Current</th>{% for month in sheet.months %}<th>{{ month.label }}</th>{% endfor %}</tr>
-          </thead>
+  <main class="workbook">
+    {% for sheet in sheets %}
+    <section class="sheet-panel {{ 'active' if loop.first else '' }}" data-sheet="{{ sheet.slug }}" aria-label="{{ sheet.title }} sheet">
+      <div class="grid-wrap">
+        <table class="grid" style="--cols: {{ sheet.cols }}">
+          <colgroup>
+            <col class="rownums">
+            {% for i in range(sheet.cols) %}
+              {% set letter = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i] %}
+              <col style="width: {{ sheet.col_widths.get(letter, 72) }}px">
+            {% endfor %}
+          </colgroup>
+          <thead><tr><th class="corner"></th>{% for i in range(sheet.cols) %}<th>{{ 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i] }}</th>{% endfor %}</tr></thead>
           <tbody>
-            {% for account in sheet.account_rows %}
-              <tr class="account-row"><th>{{ loop.index + 1 }}</th><td>{{ account.name or '&nbsp;'|safe }}</td><td>{{ account.balance|money }}</td>{% for month in sheet.months %}<td>{{ account.months.get(month.key, '')|money if account.months.get(month.key) is not none else '' }}</td>{% endfor %}</tr>
+          {% for row in range(1, sheet.rows + 1) %}
+            <tr><th class="rowhead">{{ row }}</th>
+            {% for col in range(sheet.cols) %}
+              {% set key = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[col] ~ row %}
+              {% set cell = sheet.cells.get(key, {}) %}
+              <td class="cell {{ cell.get('class', '') }}" data-cell="{{ key }}" data-formula="{{ cell.get('formula', '') }}" contenteditable="{{ 'true' if cell.get('editable', True) else 'false' }}">{{ cell.get('value', '') }}</td>
             {% endfor %}
-            <tr class="blank-row"><th>5</th><td colspan="{{ sheet.months|length + 2 }}"></td></tr>
-            {% for bill in sheet.bill_rows %}
-              <tr><th>{{ loop.index + 5 }}</th><td>{{ bill.name }}</td><td>{{ bill.actual|default('', true)|money if bill.actual is defined else '' }}</td>{% for month in sheet.months %}<td class="{{ 'paid' if bill.values[month.key] else 'unpaid' }}">{{ bill.values[month.key]|money if bill.values[month.key] else '' }}</td>{% endfor %}</tr>
-            {% endfor %}
+            </tr>
+          {% endfor %}
           </tbody>
-          <tfoot>
-            <tr><th>30</th><th>Total Left To Pay</th><th></th>{% for month in sheet.months %}<th>{{ sheet.totals_left[month.key]|money }}</th>{% endfor %}</tr>
-            <tr><th>31</th><th>Total Leftover (Pre Paid)</th><th></th>{% for month in sheet.months %}<th class="{{ 'positive' if sheet.pre_paid[month.key] >= 0 else 'negative' }}">{{ sheet.pre_paid[month.key]|money }}</th>{% endfor %}</tr>
-          </tfoot>
         </table>
       </div>
     </section>
-
-    <section class="summary-grid">
-      <article><span>Money in accounts</span><strong>{{ monthly_income|money }}</strong></article>
-      <article><span>Monthly outgoings</span><strong>{{ outgoing|money }}</strong></article>
-      <article><span>Total left to pay</span><strong>{{ left_to_pay|money }}</strong></article>
-      <article><span>Total leftover</span><strong class="{{ 'positive' if leftover >= 0 else 'negative' }}">{{ leftover|money }}</strong></article>
-    </section>
-
-    <section class="card form-grid">
-      <form method="post" action="{{ url_for('add_account') }}"><h3>Add account</h3><label>Name <input name="name" required></label><label>Balance <input name="balance" type="number" step="0.01" required></label><button>Add account</button></form>
-      <form method="post" action="{{ url_for('add_bill') }}"><h3>Add outgoing</h3><label>Name <input name="name" required></label><label>Amount <input name="amount" type="number" step="0.01" required></label><label>Due day <input name="day_due" type="number" min="1" max="31"></label><label>Category <input name="category" value="Outgoing"></label><button>Add outgoing</button></form>
-    </section>
-
-    <section id="daily" class="card two-col">
-      <div><h2>Copy of Food/Fuel Calc</h2><p class="muted">Log dated food, petrol, fuel miles, or day-to-day spending.</p><table><thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Notes</th></tr></thead><tbody>{% for expense in expenses %}<tr><td>{{ expense.spent_on }}</td><td>{{ expense.category }}</td><td>{{ expense.amount|money }}</td><td>{{ expense.notes }}</td></tr>{% else %}<tr><td colspan="4">No daily spending yet.</td></tr>{% endfor %}</tbody><tfoot><tr><th colspan="2">Tracked total</th><th>{{ expense_total|money }}</th><th></th></tr></tfoot></table></div>
-      <form method="post" action="{{ url_for('add_expense') }}"><h3>Add spending</h3><label>Date <input name="spent_on" type="date" value="{{ today }}"></label><label>Category <select name="category"><option>Food</option><option>Petrol</option><option>Fuel miles</option><option>Other</option></select></label><label>Amount <input name="amount" type="number" step="0.01" required></label><label>Notes <input name="notes"></label><button>Add spending</button></form>
-    </section>
-
-    <section id="wages" class="card">
-      <h2>Wage calculator</h2>
-      <div class="two-col"><form method="post" action="{{ url_for('add_wage_week') }}"><h3>Add week</h3><label>Week number <input name="week_number" type="number" required></label><label>Week start <input name="week_start" type="date" value="{{ today }}" required></label><label>Basic hours <input name="basic_hours" type="number" min="0" value="40"></label><label>Basic minutes <input name="basic_minutes" type="number" min="0" max="59" value="0"></label><label>Time @ 3rd hours <input name="third_hours" type="number" min="0" value="0"></label><label>Time @ 3rd minutes <input name="third_minutes" type="number" min="0" max="59" value="0"></label><button>Add week</button></form><form method="post" action="{{ url_for('update_wage_settings') }}"><h3>Rates and deductions</h3><label>Basic rate <input name="basic_rate" type="number" step="0.01" value="{{ settings.basic_rate }}"></label><label>Time @ 3rd hourly value <input name="third_rate" type="number" step="0.01" value="{{ '%.4f'|format(settings.third_rate) }}"></label><label>PAYE rate <input name="paye_rate" type="number" step="0.0000001" value="{{ settings.paye_rate }}"></label><label>NI rate <input name="ni_rate" type="number" step="0.0000001" value="{{ settings.ni_rate }}"></label><label>Student loan <input name="student_loan" type="number" step="0.01" value="{{ settings.student_loan }}"></label><label>Wage stream <input name="wage_stream" type="number" step="0.01" value="{{ settings.wage_stream }}"></label><button>Save rates</button></form></div>
-      <table><thead><tr><th>Wk</th><th>Start</th><th>Basic total</th><th>Basic pay</th><th>Time @ 3rd total</th><th>Time @ 3rd pay</th></tr></thead><tbody>{% for row in wages.rows %}<tr><td>{{ row.week.week_number }}</td><td>{{ row.week.week_start }}</td><td>{{ row.basic_total }}</td><td>{{ row.basic_pay|money }}</td><td>{{ row.third_total }}</td><td>{{ row.third_pay|money }}</td></tr>{% else %}<tr><td colspan="6">Add wage weeks to calculate gross and net pay.</td></tr>{% endfor %}</tbody><tfoot><tr><th colspan="2">Total time</th><th colspan="4">{{ wages.total_time }}</th></tr><tr><th colspan="5">GROSS PAY</th><th>{{ wages.gross|money }}</th></tr><tr><th colspan="5">PAYE</th><th>{{ wages.paye|money }}</th></tr><tr><th colspan="5">NI</th><th>{{ wages.ni|money }}</th></tr><tr><th colspan="5">NET PAY</th><th>{{ wages.net|money }}</th></tr></tfoot></table>
-    </section>
+    {% endfor %}
   </main>
+
+  <footer class="tabs">
+    <button class="add-tab">+</button><button class="hamburger">☰</button>
+    {% for sheet in sheets %}<button class="tab {{ 'active' if loop.first else '' }}" data-target="{{ sheet.slug }}">{{ sheet.title }}</button>{% endfor %}
+    <button class="tab ghost">23>Jul</button><button class="tab ghost">25>Jun</button><button class="tab ghost">Sheet5</button>
+    <button id="reset" class="reset">Reset saved edits</button>
+  </footer>
+
+<script>
+const panels = [...document.querySelectorAll('.sheet-panel')];
+const tabs = [...document.querySelectorAll('.tab[data-target]')];
+const nameBox = document.getElementById('name-box');
+const formulaInput = document.getElementById('formula-input');
+let activeCell = document.querySelector('.cell');
+
+function setActive(cell) {
+  if (!cell) return;
+  document.querySelectorAll('.cell.selected').forEach(c => c.classList.remove('selected'));
+  activeCell = cell;
+  cell.classList.add('selected');
+  nameBox.textContent = cell.dataset.cell;
+  formulaInput.value = cell.dataset.formula || cell.textContent.trim();
+}
+
+tabs.forEach(tab => tab.addEventListener('click', () => {
+  tabs.forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  panels.forEach(panel => panel.classList.toggle('active', panel.dataset.sheet === tab.dataset.target));
+  setActive(document.querySelector(`.sheet-panel[data-sheet="${tab.dataset.target}"] .cell`));
+}));
+
+document.querySelectorAll('.cell').forEach(cell => {
+  cell.addEventListener('focus', () => setActive(cell));
+  cell.addEventListener('click', () => setActive(cell));
+  cell.addEventListener('input', () => {
+    formulaInput.value = cell.textContent.trim();
+    cell.classList.add('dirty');
+  });
+  cell.addEventListener('blur', async () => {
+    if (!cell.classList.contains('dirty')) return;
+    cell.classList.remove('dirty');
+    const panel = cell.closest('.sheet-panel');
+    await fetch('/api/cell', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sheet: panel.dataset.sheet, cell: cell.dataset.cell, value: cell.textContent.trim()})});
+  });
+  cell.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    cell.blur();
+    const next = cell.closest('tr')?.nextElementSibling?.children[cell.cellIndex];
+    if (next?.classList.contains('cell')) next.focus();
+  });
+});
+
+formulaInput.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || !activeCell) return;
+  activeCell.textContent = formulaInput.value;
+  activeCell.classList.add('dirty');
+  activeCell.blur();
+});
+
+document.getElementById('reset').addEventListener('click', async () => {
+  if (!confirm('Reset saved cell edits back to the spreadsheet template?')) return;
+  await fetch('/api/reset', {method: 'POST'});
+  location.reload();
+});
+
+setActive(activeCell);
+</script>
 </body>
 </html>

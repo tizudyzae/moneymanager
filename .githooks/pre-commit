@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+changed=$(git diff --cached --name-only | grep -v '^money_manager/VERSION$' || true)
+if [ -n "$changed" ]; then
+  python scripts/bump_version.py
+  git add money_manager/VERSION
+fi
