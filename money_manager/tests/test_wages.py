@@ -24,3 +24,10 @@ def test_wage_calculation_matches_spreadsheet_example():
 
 def test_minutes_to_label():
     assert money_core.minutes_to_label(2370) == "39 Hours and 30 Minutes"
+
+
+def test_default_sheet_matches_visible_july_left_to_pay():
+    sheet = money_core.build_sheet(money_core.DEFAULT_ACCOUNTS, money_core.DEFAULT_BILLS)
+
+    assert round(sheet["totals_left"]["jul"], 2) == 1753.93
+    assert round(sheet["pre_paid"]["jul"], 2) == 182.07
