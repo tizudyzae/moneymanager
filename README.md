@@ -29,3 +29,7 @@ Run the app locally after installing dependencies:
 python -m pip install -r money_manager/requirements.txt
 MONEY_MANAGER_DB=/tmp/money_manager.db python money_manager/app.py
 ```
+
+## Versioning
+
+The repository is configured with `.githooks/pre-commit` as its Git hooks path. Whenever Codex or another contributor commits staged code changes, the hook runs `scripts/bump_version.py` and automatically increments `money_manager/VERSION` in the same commit.
