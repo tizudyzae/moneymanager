@@ -41,7 +41,7 @@ def default_budget_data():
     today = date.today()
     first = today.replace(day=1)
     return {
-        "settings": {"paydays": [first.isoformat()]},
+        "settings": {"paydays": [first.isoformat()], "dailyFoodAmount": 15, "dailyPetrolAmount": 3.71},
         "recurringPayments": [
             {"id": str(uuid.uuid4()), "name": name, "amount": amount, "day": day, "active": True}
             for name, amount, day in DEFAULT_PAYMENTS
@@ -112,7 +112,10 @@ def load_budget_data():
         data = json.loads(row["value"])
     except json.JSONDecodeError:
         data = default_budget_data()
-    data.setdefault("settings", {}).setdefault("paydays", [])
+    settings = data.setdefault("settings", {})
+    settings.setdefault("paydays", [])
+    settings.setdefault("dailyFoodAmount", 15)
+    settings.setdefault("dailyPetrolAmount", 3.71)
     data.setdefault("recurringPayments", [])
     data.setdefault("months", {})
     return data
