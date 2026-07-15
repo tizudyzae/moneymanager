@@ -354,6 +354,10 @@
       scrollbar-width:none;
     }
     .month-history::-webkit-scrollbar{display:none}
+    .calendar-list,.settings-grid{display:grid;gap:12px}
+    .calendar-item,label{border:1px solid var(--line);border-radius:18px;background:white;padding:14px}
+    label{display:grid;gap:8px;font-weight:800} label small{font-weight:500;color:var(--muted)} textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+    .calendar-item strong{display:block}.calendar-item span{color:var(--muted);font-size:13px}
     .month-pill{
       white-space:nowrap;
       border:1px solid var(--line);
@@ -468,7 +472,7 @@
 <body>
   <main class="app-shell">
     <header class="mobile-header">
-      <button class="icon-btn" aria-label="Menu">☰</button>
+      <button class="icon-btn" id="openSettings" aria-label="Settings">⚙</button>
       <div class="month-control">
         <button id="prevMonth" aria-label="Previous month">‹</button>
         <div class="month-title" id="monthLabel"></div>
@@ -477,7 +481,7 @@
       <button class="icon-btn add-btn" id="topAddPayment" aria-label="Add payment">+</button>
     </header>
 
-    <section class="section">
+    <section class="section overview-view">
       <div class="section-head">
         <h2>Accounts</h2>
       </div>
@@ -521,9 +525,9 @@
       </div>
     </section>
 
-    <section class="section">
+    <section class="section overview-view">
       <div class="section-head">
-        <h2>Payments</h2>
+        <h2>Payments for <span id="activePaydayLabel"></span></h2>
         <div class="filter-tabs">
           <button class="active" data-filter="all">All</button>
           <button data-filter="upcoming">Upcoming</button>
@@ -541,11 +545,31 @@
       </div>
     </section>
 
-    <section class="section">
-      <div class="section-head">
-        <h2>Month history</h2>
-      </div>
+    <section class="section app-view" id="calendarView" hidden>
+      <div class="section-head"><h2>Payday calendar</h2></div>
+      <div class="calendar-list" id="calendarList"></div>
+    </section>
+
+    <section class="section app-view" id="historyView" hidden>
+      <div class="section-head"><h2>Payday history</h2></div>
       <div class="month-history" id="monthHistory"></div>
+    </section>
+
+    <section class="section app-view" id="settingsView" hidden>
+      <div class="section-head"><h2>Settings</h2><button class="primary" id="saveSettings">Save</button></div>
+      <div class="settings-grid">
+        <label>Paydays <small>Use exact dates, one per line. The app builds periods from these dates instead of months.</small><textarea id="paydaysInput" rows="7"></textarea></label>
+        <div>
+          <h3>Recurring payments</h3>
+          <div id="recurringList" class="payments"></div>
+          <div class="add-payment-panel open recurring-add">
+            <input id="recName" placeholder="Name" />
+            <input id="recAmount" type="number" step="0.01" placeholder="Amount" />
+            <input id="recDay" type="number" min="1" max="31" placeholder="Due day" />
+            <button class="primary" id="addRecurring">Add recurring</button>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -569,226 +593,131 @@
   </aside>
 
   <nav class="bottom-nav" aria-label="Main navigation">
-    <button class="active"><span class="nav-icon">⌂</span><span>Overview</span></button>
-    <button><span class="nav-icon">▣</span><span>Calendar</span></button>
-    <button><span class="nav-icon">↶</span><span>History</span></button>
-    <button><span class="nav-icon">⚙</span><span>Settings</span></button>
+    <button class="active" data-view="overview"><span class="nav-icon">⌂</span><span>Overview</span></button>
+    <button data-view="calendar"><span class="nav-icon">▣</span><span>Calendar</span></button>
+    <button data-view="history"><span class="nav-icon">↶</span><span>History</span></button>
+    <button data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
   </nav>
 
 <script>
-  const formatMoney = value => new Intl.NumberFormat('en-GB', {
-    style:'currency', currency:'GBP'
-  }).format(Number(value || 0));
-
+  const formatMoney = value => new Intl.NumberFormat('en-GB', {style:'currency', currency:'GBP'}).format(Number(value || 0));
   const pad = n => String(n).padStart(2,'0');
-  const monthKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
-  const monthName = d => d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  const dateKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const parseLocalDate = value => { const [y,m,d] = value.split('-').map(Number); return new Date(y, m - 1, d); };
+  const paydayName = value => parseLocalDate(value).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
 
-  const defaultPayments = [
-    ['Rent',466.67,31],['Council Tax',94.91,1],['Internet',10,5],['Energy',139.97,6],
-    ['Water',42.67,6],['Energy Credit',-93.91,6],['Car Tax',17.50,2],['AA',13.01,1],
-    ['Admiral',49.55,12],['Petrol',105,1],['Barclayloan',92.83,31],['iCloud Drive',8.99,2],
-    ['Vodafone',12,5],['Food',420,1],['YouTube Premium',12.99,25],['Google Drive',1.59,1],
-    ['First Direct',7.29,2],['Apple Care',11.99,2],['Barclaycard',92.07,18],
-    ['PureGym',21.99,1],['ChatGPT',17.97,1],['PayPal',24.91,1]
-  ].map((p,i)=>({
-    id:crypto.randomUUID?.() || `${Date.now()}-${i}`,
-    name:p[0], amount:p[1], day:p[2], paid:false
-  }));
-
-  let current = new Date(2026,6,1);
+  let state = {settings:{paydays:[]}, recurringPayments:[], months:{}};
+  let currentPayday = null;
   let activeFilter = 'all';
-  let state = JSON.parse(localStorage.getItem('expenseTrackerData') || '{}');
+  let activeView = 'overview';
 
-  function ensureMonth(){
-    const key = monthKey(current);
-    if(!state[key]){
-      const previous = new Date(current.getFullYear(), current.getMonth()-1, 1);
-      const previousData = state[monthKey(previous)];
-      state[key] = {
-        balances:{firstDirect:0,lloyds:0,barclays:0},
-        payments: previousData
-          ? previousData.payments.map(p=>({...p,id:crypto.randomUUID?.()||String(Math.random()),paid:false}))
-          : JSON.parse(JSON.stringify(defaultPayments))
-      };
-      save();
-    }
-    return state[key];
+  async function apiSave(){
+    await fetch('/api/budget', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state)});
   }
 
-  function save(){
-    localStorage.setItem('expenseTrackerData',JSON.stringify(state));
+  function sortedPaydays(){
+    return [...new Set(state.settings.paydays)].filter(Boolean).sort();
+  }
+
+  function nearestPayday(){
+    const today = dateKey(new Date());
+    const paydays = sortedPaydays();
+    return paydays.find(day => day >= today) || paydays.at(-1) || today;
+  }
+
+  function ensurePayday(){
+    if(!currentPayday) currentPayday = nearestPayday();
+    if(!state.months[currentPayday]){
+      state.months[currentPayday] = {
+        balances:{firstDirect:0,lloyds:0,barclays:0},
+        payments: state.recurringPayments.filter(p=>p.active !== false).map(p=>({...p,id:crypto.randomUUID?.() || String(Math.random()), recurringId:p.id, paid:false}))
+      };
+    }
+    return state.months[currentPayday];
+  }
+
+  function dueDate(day){
+    const base = parseLocalDate(currentPayday);
+    const due = new Date(base.getFullYear(), base.getMonth(), Math.min(Number(day)||1,31));
+    if(due < base) due.setMonth(due.getMonth()+1);
+    return due;
   }
 
   function dueText(day, paid){
-    const due = new Date(current.getFullYear(), current.getMonth(), Math.min(Number(day)||1,31));
-    return `${paid ? 'Paid' : 'Due'} ${due.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
+    return `${paid ? 'Paid' : 'Due'} ${dueDate(day).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
   }
 
   function render(){
-    const data = ensureMonth();
-    document.getElementById('monthLabel').textContent = monthName(current);
-
+    const data = ensurePayday();
+    document.getElementById('monthLabel').textContent = paydayName(currentPayday);
+    document.getElementById('activePaydayLabel').textContent = paydayName(currentPayday);
     ['firstDirect','lloyds','barclays'].forEach(id=>{
       const input = document.getElementById(id);
       input.value = Number(data.balances[id] || 0).toFixed(2);
       input.onfocus = () => input.select();
-      input.oninput = e => {
-        data.balances[id] = Number(e.target.value || 0);
-        save();
-        updateSummary();
-      };
+      input.oninput = e => { data.balances[id] = Number(e.target.value || 0); apiSave(); updateSummary(); };
       input.onblur = () => input.value = Number(data.balances[id] || 0).toFixed(2);
     });
-
-    renderPayments();
-    updateSummary();
-    renderHistory();
+    renderPayments(); updateSummary(); renderHistory(); renderCalendar(); renderSettings(); setView(activeView);
   }
 
   function renderPayments(){
-    const data = ensureMonth();
-    const list = document.getElementById('paymentsList');
-    list.innerHTML = '';
-
-    const filtered = data.payments
-      .filter(p => activeFilter === 'all' || (activeFilter === 'paid' ? p.paid : !p.paid))
-      .sort((a,b)=>Number(a.paid)-Number(b.paid) || a.day-b.day);
-
-    if(!filtered.length){
-      list.innerHTML = `<div class="empty">No ${activeFilter === 'all' ? '' : activeFilter} payments for this month.</div>`;
-      return;
-    }
-
+    const data = ensurePayday(); const list = document.getElementById('paymentsList'); list.innerHTML = '';
+    const filtered = data.payments.filter(p => activeFilter === 'all' || (activeFilter === 'paid' ? p.paid : !p.paid)).sort((a,b)=>Number(a.paid)-Number(b.paid) || dueDate(a.day)-dueDate(b.day));
+    if(!filtered.length){ list.innerHTML = `<div class="empty">No ${activeFilter === 'all' ? '' : activeFilter} payments for this payday.</div>`; return; }
     filtered.forEach(payment=>{
-      const row = document.createElement('article');
-      row.className = `payment-card ${payment.paid ? 'paid' : ''}`;
-      row.innerHTML = `
-        <div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div>
-        <div class="payment-copy">
-          <div class="payment-name">${payment.name}${payment.day ? ` (${payment.day})` : ''}</div>
-          <div class="payment-meta">${dueText(payment.day,payment.paid)}</div>
-        </div>
-        <input class="amount-input" type="number" step="0.01" value="${Number(payment.amount).toFixed(2)}" aria-label="${payment.name} amount">
-        <button class="check ${payment.paid?'on':''}" aria-label="Mark ${payment.name} paid">${payment.paid?'✓':''}</button>
-        <button class="more" aria-label="Edit ${payment.name}">⋮</button>
-        <div class="payment-editor">
-          <input class="edit-name" value="${payment.name}" aria-label="Payment name">
-          <input class="edit-day" type="number" min="1" max="31" value="${payment.day}" aria-label="Due day">
-          <input class="edit-amount" type="number" step="0.01" value="${payment.amount}" aria-label="Amount">
-          <button class="danger">Delete</button>
-        </div>
-      `;
-
-      row.querySelector('.amount-input').onchange = e => {
-        payment.amount = Number(e.target.value || 0);
-        save(); updateSummary(); renderPayments();
-      };
-
-      row.querySelector('.check').onclick = () => {
-        payment.paid = !payment.paid;
-        save(); render();
-      };
-
-      row.querySelector('.more').onclick = () => {
-        row.classList.toggle('editing');
-      };
-
-      row.querySelector('.edit-name').onchange = e => {
-        payment.name = e.target.value.trim() || payment.name;
-        save(); renderPayments();
-      };
-      row.querySelector('.edit-day').onchange = e => {
-        payment.day = Math.max(1,Math.min(31,Number(e.target.value || 1)));
-        save(); renderPayments();
-      };
-      row.querySelector('.edit-amount').onchange = e => {
-        payment.amount = Number(e.target.value || 0);
-        save(); render();
-      };
-      row.querySelector('.danger').onclick = () => {
-        data.payments = data.payments.filter(p=>p.id!==payment.id);
-        save(); render();
-      };
-
+      const row = document.createElement('article'); row.className = `payment-card ${payment.paid ? 'paid' : ''}`;
+      row.innerHTML = `<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}${payment.day ? ` (${payment.day})` : ''}</div><div class="payment-meta">${dueText(payment.day,payment.paid)}</div></div><input class="amount-input" type="number" step="0.01" value="${Number(payment.amount).toFixed(2)}"><button class="check ${payment.paid?'on':''}">${payment.paid?'✓':''}</button><button class="more">⋮</button><div class="payment-editor"><input class="edit-name" value="${payment.name}"><input class="edit-day" type="number" min="1" max="31" value="${payment.day}"><input class="edit-amount" type="number" step="0.01" value="${payment.amount}"><button class="danger">Delete</button></div>`;
+      row.querySelector('.amount-input').onchange = e => { payment.amount = Number(e.target.value || 0); apiSave(); updateSummary(); renderPayments(); };
+      row.querySelector('.check').onclick = () => { payment.paid = !payment.paid; apiSave(); render(); };
+      row.querySelector('.more').onclick = () => row.classList.toggle('editing');
+      row.querySelector('.edit-name').onchange = e => { payment.name = e.target.value.trim() || payment.name; apiSave(); renderPayments(); };
+      row.querySelector('.edit-day').onchange = e => { payment.day = Math.max(1,Math.min(31,Number(e.target.value || 1))); apiSave(); renderPayments(); };
+      row.querySelector('.edit-amount').onchange = e => { payment.amount = Number(e.target.value || 0); apiSave(); render(); };
+      row.querySelector('.danger').onclick = () => { data.payments = data.payments.filter(p=>p.id!==payment.id); apiSave(); render(); };
       list.appendChild(row);
     });
   }
 
   function updateSummary(){
-    const data = ensureMonth();
-    const totalAvailable = Object.values(data.balances).reduce((a,b)=>a+Number(b||0),0);
-    const unpaidPayments = data.payments.filter(p=>!p.paid);
-    const leftToPay = unpaidPayments.reduce((a,p)=>a+Number(p.amount||0),0);
-
-    document.getElementById('totalAvailable').textContent = formatMoney(totalAvailable);
-    document.getElementById('leftToPay').textContent = formatMoney(leftToPay);
-    document.getElementById('leftover').textContent = formatMoney(totalAvailable-leftToPay);
-    document.getElementById('remainingPayments').textContent =
-      `${unpaidPayments.length} payment${unpaidPayments.length===1?'':'s'}`;
+    const data = ensurePayday(); const total = Object.values(data.balances).reduce((a,b)=>a+Number(b||0),0); const unpaid = data.payments.filter(p=>!p.paid); const left = unpaid.reduce((a,p)=>a+Number(p.amount||0),0);
+    document.getElementById('totalAvailable').textContent = formatMoney(total); document.getElementById('leftToPay').textContent = formatMoney(left); document.getElementById('leftover').textContent = formatMoney(total-left); document.getElementById('remainingPayments').textContent = `${unpaid.length} payment${unpaid.length===1?'':'s'}`;
   }
 
   function renderHistory(){
-    const history = document.getElementById('monthHistory');
-    history.innerHTML = '';
-    Object.keys(state).sort().forEach(key=>{
-      const [y,m] = key.split('-').map(Number);
-      const d = new Date(y,m-1,1);
-      const btn = document.createElement('button');
-      btn.className = `month-pill ${key===monthKey(current)?'active':''}`;
-      btn.textContent = monthName(d);
-      btn.onclick = ()=>{current=d;render();};
-      history.appendChild(btn);
-    });
+    const history = document.getElementById('monthHistory'); history.innerHTML = '';
+    Object.keys(state.months).sort().forEach(key=>{ const btn=document.createElement('button'); btn.className=`month-pill ${key===currentPayday?'active':''}`; btn.textContent=paydayName(key); btn.onclick=()=>{currentPayday=key; activeView='overview'; render();}; history.appendChild(btn); });
   }
 
-  document.getElementById('prevMonth').onclick = ()=>{
-    current=new Date(current.getFullYear(),current.getMonth()-1,1);
-    render();
-  };
+  function renderCalendar(){
+    const list = document.getElementById('calendarList'); list.innerHTML='';
+    sortedPaydays().forEach(day=>{ const data=state.months[day]; const item=document.createElement('div'); item.className='calendar-item'; item.innerHTML=`<strong>${paydayName(day)}</strong><span>${data ? `${data.payments.length} payments tracked` : 'Not started yet'}</span>`; item.onclick=()=>{currentPayday=day; activeView='overview'; render();}; list.appendChild(item); });
+  }
 
-  document.getElementById('nextMonth').onclick = ()=>{
-    current=new Date(current.getFullYear(),current.getMonth()+1,1);
-    render();
-  };
+  function renderSettings(){
+    paydaysInput.value = sortedPaydays().join('\n'); recurringList.innerHTML='';
+    state.recurringPayments.forEach(payment=>{ const row=document.createElement('article'); row.className='payment-card'; row.innerHTML=`<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name} (${payment.day})</div><div class="payment-meta">Recurring every payday period</div></div><input class="amount-input" type="number" step="0.01" value="${Number(payment.amount).toFixed(2)}"><button class="check ${payment.active!==false?'on':''}">${payment.active!==false?'✓':''}</button><button class="danger">×</button>`; row.querySelector('.amount-input').onchange=e=>{payment.amount=Number(e.target.value||0); apiSave();}; row.querySelector('.check').onclick=()=>{payment.active=payment.active===false; apiSave(); renderSettings();}; row.querySelector('.danger').onclick=()=>{state.recurringPayments=state.recurringPayments.filter(p=>p.id!==payment.id); apiSave(); renderSettings();}; recurringList.appendChild(row); });
+  }
 
-  document.querySelectorAll('.filter-tabs button').forEach(button=>{
-    button.onclick = ()=>{
-      activeFilter = button.dataset.filter;
-      document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active'));
-      button.classList.add('active');
-      renderPayments();
-    };
-  });
+  function setView(view){
+    activeView=view; document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+    document.querySelectorAll('.app-view').forEach(v=>v.hidden=true);
+    document.querySelectorAll('.overview-view').forEach(v=>v.hidden = view !== 'overview');
+    document.querySelector('.floating-summary').hidden = view !== 'overview';
+    ['calendar','history','settings'].forEach(v=>{ const el=document.getElementById(`${v}View`); if(el) el.hidden = view !== v; });
+  }
 
-  document.getElementById('topAddPayment').onclick = ()=>{
-    document.getElementById('addPanel').classList.toggle('open');
-    if(document.getElementById('addPanel').classList.contains('open')){
-      document.getElementById('newName').focus();
-    }
-  };
+  prevMonth.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.max(0,i-1)] || currentPayday; render(); };
+  nextMonth.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.min(p.length-1,i+1)] || currentPayday; render(); };
+  document.querySelectorAll('.filter-tabs button').forEach(button=>{ button.onclick=()=>{ activeFilter=button.dataset.filter; document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active')); button.classList.add('active'); renderPayments(); }; });
+  topAddPayment.onclick = ()=>{ addPanel.classList.toggle('open'); if(addPanel.classList.contains('open')) newName.focus(); };
+  addPayment.onclick = ()=>{ const data=ensurePayday(); const name=newName.value.trim(); if(!name) return; data.payments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(newAmount.value||0), day:Math.max(1,Math.min(31,Number(newDay.value||1))), paid:false}); newName.value=newAmount.value=newDay.value=''; addPanel.classList.remove('open'); apiSave(); render(); };
+  addRecurring.onclick = ()=>{ const name=recName.value.trim(); if(!name) return; state.recurringPayments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(recAmount.value||0), day:Math.max(1,Math.min(31,Number(recDay.value||1))), active:true}); recName.value=recAmount.value=recDay.value=''; apiSave(); renderSettings(); };
+  saveSettings.onclick = ()=>{ state.settings.paydays = paydaysInput.value.split(/\s+/).filter(Boolean).sort(); currentPayday = nearestPayday(); apiSave(); render(); };
+  openSettings.onclick = ()=>{ setView('settings'); };
+  document.querySelectorAll('.bottom-nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 
-  document.getElementById('addPayment').onclick = ()=>{
-    const data = ensureMonth();
-    const name = document.getElementById('newName').value.trim();
-    const amount = Number(document.getElementById('newAmount').value || 0);
-    const day = Math.max(1,Math.min(31,Number(document.getElementById('newDay').value || 1)));
-    if(!name) return;
-
-    data.payments.push({
-      id:crypto.randomUUID?.() || String(Date.now()),
-      name, amount, day, paid:false
-    });
-
-    document.getElementById('newName').value='';
-    document.getElementById('newAmount').value='';
-    document.getElementById('newDay').value='';
-    document.getElementById('addPanel').classList.remove('open');
-    save();
-    render();
-  };
-
-  render();
+  fetch('/api/budget').then(r=>r.json()).then(data=>{ state=data; currentPayday=nearestPayday(); render(); });
 </script>
 </body>
 </html>
