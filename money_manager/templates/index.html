@@ -622,15 +622,23 @@
     const payday = parseLocalDate(currentPayday); payday.setHours(0,0,0,0);
     return Math.max(0, Math.ceil((payday - today) / 86400000));
   }
+  function isCurrentPaydayPeriod(){
+    return currentPayday === nearestPayday();
+  }
+  function recurringAmountFor(payment){
+    const recurring = state.recurringPayments.find(item => item.id === payment.recurringId || String(item.name || '').trim().toLowerCase() === String(payment.name || '').trim().toLowerCase());
+    return Number((recurring || payment).amount || 0);
+  }
   function calculatedPaymentAmount(payment){
-    return isAutoDailyPayment(payment) ? daysLeftInPayCycle() * dailyAmountFor(payment) : Number(payment.amount || 0);
+    return isAutoDailyPayment(payment) && isCurrentPaydayPeriod() ? daysLeftInPayCycle() * dailyAmountFor(payment) : Number(payment.amount || 0);
   }
   function syncAutomaticPayments(){
     const data = ensurePayday();
+    const useDailyCalculation = isCurrentPaydayPeriod();
     data.payments.forEach(payment => {
       if(isAutoDailyPayment(payment)){
         payment.paid = false;
-        payment.amount = Number(calculatedPaymentAmount(payment).toFixed(2));
+        payment.amount = Number((useDailyCalculation ? daysLeftInPayCycle() * dailyAmountFor(payment) : recurringAmountFor(payment)).toFixed(2));
       }
     });
   }
@@ -697,7 +705,7 @@
     if(!filtered.length){ list.innerHTML = `<div class="empty">No ${activeFilter === 'all' ? '' : activeFilter} payments for this payday.</div>`; return; }
     filtered.forEach(payment=>{
       const row = document.createElement('article'); row.className = `payment-card ${payment.paid ? 'paid' : ''} ${isAutoDailyPayment(payment) ? 'auto-payment' : ''}`;
-      row.innerHTML = `<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · ${dueText(payment.day,payment.paid)}${isAutoDailyPayment(payment) ? ` · ${daysLeftInPayCycle()} days × ${formatMoney(dailyAmountFor(payment))}` : ''}</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}>${isAutoDailyPayment(payment) ? '' : `<button class="check ${payment.paid?'on':''}">${payment.paid?'✓':''}</button>`}<button class="more">⋮</button><div class="payment-editor"><input class="edit-name" value="${payment.name}" ${isAutoDailyPayment(payment) ? 'readonly' : ''}><input class="edit-day" type="number" min="1" max="31" value="${payment.day}"><input class="edit-amount" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}><button class="danger">Delete</button></div>`;
+      row.innerHTML = `<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · ${dueText(payment.day,payment.paid)}${isAutoDailyPayment(payment) && isCurrentPaydayPeriod() ? ` · ${daysLeftInPayCycle()} days × ${formatMoney(dailyAmountFor(payment))}` : ''}</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}>${isAutoDailyPayment(payment) ? '' : `<button class="check ${payment.paid?'on':''}">${payment.paid?'✓':''}</button>`}<button class="more">⋮</button><div class="payment-editor"><input class="edit-name" value="${payment.name}" ${isAutoDailyPayment(payment) ? 'readonly' : ''}><input class="edit-day" type="number" min="1" max="31" value="${payment.day}"><input class="edit-amount" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}><button class="danger">Delete</button></div>`;
       row.querySelector('.amount-input').onchange = e => { if(isAutoDailyPayment(payment) || payment.paid) return; payment.amount = parseMoney(e.target.value); apiSave(); updateSummary(); renderPayments(); };
       const checkButton = row.querySelector('.check');
       if(checkButton) checkButton.onclick = () => { payment.paid = !payment.paid; apiSave(); render(); };
