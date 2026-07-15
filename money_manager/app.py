@@ -11,6 +11,7 @@ from core import default_sheets
 
 DB_PATH = Path(os.environ.get("MONEY_MANAGER_DB", "/config/money_manager.db"))
 VERSION_PATH = Path(__file__).resolve().parent / "VERSION"
+NEXT_PAYDAY = "2026-07-23"
 
 app = Flask(__name__)
 
@@ -38,10 +39,8 @@ DEFAULT_PAYMENTS = [
 
 
 def default_budget_data():
-    today = date.today()
-    first = today.replace(day=1)
     return {
-        "settings": {"paydays": [first.isoformat()], "dailyFoodAmount": 15, "dailyPetrolAmount": 3.71},
+        "settings": {"paydays": [NEXT_PAYDAY], "dailyFoodAmount": 15, "dailyPetrolAmount": 3.71},
         "recurringPayments": [
             {"id": str(uuid.uuid4()), "name": name, "amount": amount, "day": day, "active": True}
             for name, amount, day in DEFAULT_PAYMENTS
@@ -113,7 +112,12 @@ def load_budget_data():
     except json.JSONDecodeError:
         data = default_budget_data()
     settings = data.setdefault("settings", {})
-    settings.setdefault("paydays", [])
+    paydays = settings.setdefault("paydays", [])
+    today_key = date.today().isoformat()
+    if today_key <= NEXT_PAYDAY and NEXT_PAYDAY not in paydays and not any(day >= today_key for day in paydays):
+        paydays.append(NEXT_PAYDAY)
+        paydays.sort()
+
     settings.setdefault("dailyFoodAmount", 15)
     settings.setdefault("dailyPetrolAmount", 3.71)
     data.setdefault("recurringPayments", [])
