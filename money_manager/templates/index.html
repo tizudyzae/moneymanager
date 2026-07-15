@@ -494,7 +494,7 @@
           </div>
           <div>
             <div class="account-name">First Direct</div>
-            <input class="balance-input" id="firstDirect" type="number" step="0.01" />
+            <input class="balance-input" id="firstDirect" type="text" inputmode="decimal" />
             <div class="available">Available</div>
           </div>
         </article>
@@ -506,7 +506,7 @@
           </div>
           <div>
             <div class="account-name">Lloyds</div>
-            <input class="balance-input" id="lloyds" type="number" step="0.01" />
+            <input class="balance-input" id="lloyds" type="text" inputmode="decimal" />
             <div class="available">Available</div>
           </div>
         </article>
@@ -518,7 +518,7 @@
           </div>
           <div>
             <div class="account-name">Barclays</div>
-            <input class="balance-input" id="barclays" type="number" step="0.01" />
+            <input class="balance-input" id="barclays" type="text" inputmode="decimal" />
             <div class="available">Available</div>
           </div>
         </article>
@@ -559,6 +559,8 @@
       <div class="section-head"><h2>Settings</h2><button class="primary" id="saveSettings">Save</button></div>
       <div class="settings-grid">
         <label>Paydays <small>Use exact dates, one per line. The app builds periods from these dates instead of months.</small><textarea id="paydaysInput" rows="7"></textarea></label>
+        <label>Daily food amount <small>Used to calculate Food automatically from the days left in the current pay cycle.</small><input id="dailyFoodAmount" type="number" step="0.01" min="0" /></label>
+        <label>Daily petrol amount <small>Used to calculate Petrol automatically from the days left in the current pay cycle.</small><input id="dailyPetrolAmount" type="number" step="0.01" min="0" /></label>
         <div>
           <h3>Recurring payments</h3>
           <div id="recurringList" class="payments"></div>
@@ -606,7 +608,27 @@
   const parseLocalDate = value => { const [y,m,d] = value.split('-').map(Number); return new Date(y, m - 1, d); };
   const paydayName = value => parseLocalDate(value).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
 
-  let state = {settings:{paydays:[]}, recurringPayments:[], months:{}};
+  const parseMoney = value => Number(String(value || '').replace(/[^0-9.-]/g, '')) || 0;
+  const isAutoDailyPayment = payment => ['food', 'petrol'].includes(String(payment.name || '').trim().toLowerCase());
+  const dailyAmountFor = payment => String(payment.name || '').trim().toLowerCase() === 'food' ? Number(state.settings.dailyFoodAmount || 0) : Number(state.settings.dailyPetrolAmount || 0);
+  function daysLeftInPayCycle(){
+    const today = new Date(); today.setHours(0,0,0,0);
+    const payday = parseLocalDate(currentPayday); payday.setHours(0,0,0,0);
+    return Math.max(0, Math.floor((payday - today) / 86400000) + 1);
+  }
+  function calculatedPaymentAmount(payment){
+    return isAutoDailyPayment(payment) && !payment.paid ? daysLeftInPayCycle() * dailyAmountFor(payment) : Number(payment.amount || 0);
+  }
+  function syncAutomaticPayments(){
+    const data = ensurePayday();
+    data.payments.forEach(payment => {
+      if(isAutoDailyPayment(payment) && !payment.paid){
+        payment.amount = Number(calculatedPaymentAmount(payment).toFixed(2));
+      }
+    });
+  }
+
+  let state = {settings:{paydays:[], dailyFoodAmount:15, dailyPetrolAmount:3.71}, recurringPayments:[], months:{}};
   let currentPayday = null;
   let activeFilter = 'all';
   let activeView = 'overview';
@@ -653,34 +675,36 @@
     document.getElementById('activePaydayLabel').textContent = paydayName(currentPayday);
     ['firstDirect','lloyds','barclays'].forEach(id=>{
       const input = document.getElementById(id);
-      input.value = Number(data.balances[id] || 0).toFixed(2);
+      input.value = formatMoney(data.balances[id] || 0);
       input.onfocus = () => input.select();
-      input.oninput = e => { data.balances[id] = Number(e.target.value || 0); apiSave(); updateSummary(); };
-      input.onblur = () => input.value = Number(data.balances[id] || 0).toFixed(2);
+      input.oninput = e => { data.balances[id] = parseMoney(e.target.value); apiSave(); updateSummary(); };
+      input.onblur = () => input.value = formatMoney(data.balances[id] || 0);
     });
     renderPayments(); updateSummary(); renderHistory(); renderCalendar(); renderSettings(); setView(activeView);
   }
 
   function renderPayments(){
+    syncAutomaticPayments();
     const data = ensurePayday(); const list = document.getElementById('paymentsList'); list.innerHTML = '';
     const filtered = data.payments.filter(p => activeFilter === 'all' || (activeFilter === 'paid' ? p.paid : !p.paid)).sort((a,b)=>Number(a.paid)-Number(b.paid) || dueDate(a.day)-dueDate(b.day));
     if(!filtered.length){ list.innerHTML = `<div class="empty">No ${activeFilter === 'all' ? '' : activeFilter} payments for this payday.</div>`; return; }
     filtered.forEach(payment=>{
       const row = document.createElement('article'); row.className = `payment-card ${payment.paid ? 'paid' : ''}`;
-      row.innerHTML = `<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}${payment.day ? ` (${payment.day})` : ''}</div><div class="payment-meta">${dueText(payment.day,payment.paid)}</div></div><input class="amount-input" type="number" step="0.01" value="${Number(payment.amount).toFixed(2)}"><button class="check ${payment.paid?'on':''}">${payment.paid?'✓':''}</button><button class="more">⋮</button><div class="payment-editor"><input class="edit-name" value="${payment.name}"><input class="edit-day" type="number" min="1" max="31" value="${payment.day}"><input class="edit-amount" type="number" step="0.01" value="${payment.amount}"><button class="danger">Delete</button></div>`;
-      row.querySelector('.amount-input').onchange = e => { payment.amount = Number(e.target.value || 0); apiSave(); updateSummary(); renderPayments(); };
+      row.innerHTML = `<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · ${dueText(payment.day,payment.paid)}${isAutoDailyPayment(payment) && !payment.paid ? ` · ${daysLeftInPayCycle()} days × ${formatMoney(dailyAmountFor(payment))}` : ''}</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}><button class="check ${payment.paid?'on':''}">${payment.paid?'✓':''}</button><button class="more">⋮</button><div class="payment-editor"><input class="edit-name" value="${payment.name}" ${isAutoDailyPayment(payment) ? 'readonly' : ''}><input class="edit-day" type="number" min="1" max="31" value="${payment.day}"><input class="edit-amount" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}><button class="danger">Delete</button></div>`;
+      row.querySelector('.amount-input').onchange = e => { if(isAutoDailyPayment(payment) || payment.paid) return; payment.amount = parseMoney(e.target.value); apiSave(); updateSummary(); renderPayments(); };
       row.querySelector('.check').onclick = () => { payment.paid = !payment.paid; apiSave(); render(); };
       row.querySelector('.more').onclick = () => row.classList.toggle('editing');
       row.querySelector('.edit-name').onchange = e => { payment.name = e.target.value.trim() || payment.name; apiSave(); renderPayments(); };
       row.querySelector('.edit-day').onchange = e => { payment.day = Math.max(1,Math.min(31,Number(e.target.value || 1))); apiSave(); renderPayments(); };
-      row.querySelector('.edit-amount').onchange = e => { payment.amount = Number(e.target.value || 0); apiSave(); render(); };
+      row.querySelector('.edit-amount').onchange = e => { if(isAutoDailyPayment(payment) || payment.paid) return; payment.amount = parseMoney(e.target.value); apiSave(); render(); };
       row.querySelector('.danger').onclick = () => { data.payments = data.payments.filter(p=>p.id!==payment.id); apiSave(); render(); };
       list.appendChild(row);
     });
   }
 
   function updateSummary(){
-    const data = ensurePayday(); const total = Object.values(data.balances).reduce((a,b)=>a+Number(b||0),0); const unpaid = data.payments.filter(p=>!p.paid); const left = unpaid.reduce((a,p)=>a+Number(p.amount||0),0);
+    syncAutomaticPayments();
+    const data = ensurePayday(); const total = Object.values(data.balances).reduce((a,b)=>a+Number(b||0),0); const unpaid = data.payments.filter(p=>!p.paid); const left = unpaid.reduce((a,p)=>a+calculatedPaymentAmount(p),0);
     document.getElementById('totalAvailable').textContent = formatMoney(total); document.getElementById('leftToPay').textContent = formatMoney(left); document.getElementById('leftover').textContent = formatMoney(total-left); document.getElementById('remainingPayments').textContent = `${unpaid.length} payment${unpaid.length===1?'':'s'}`;
   }
 
@@ -695,8 +719,8 @@
   }
 
   function renderSettings(){
-    paydaysInput.value = sortedPaydays().join('\n'); recurringList.innerHTML='';
-    state.recurringPayments.forEach(payment=>{ const row=document.createElement('article'); row.className='payment-card'; row.innerHTML=`<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name} (${payment.day})</div><div class="payment-meta">Recurring every payday period</div></div><input class="amount-input" type="number" step="0.01" value="${Number(payment.amount).toFixed(2)}"><button class="check ${payment.active!==false?'on':''}">${payment.active!==false?'✓':''}</button><button class="danger">×</button>`; row.querySelector('.amount-input').onchange=e=>{payment.amount=Number(e.target.value||0); apiSave();}; row.querySelector('.check').onclick=()=>{payment.active=payment.active===false; apiSave(); renderSettings();}; row.querySelector('.danger').onclick=()=>{state.recurringPayments=state.recurringPayments.filter(p=>p.id!==payment.id); apiSave(); renderSettings();}; recurringList.appendChild(row); });
+    paydaysInput.value = sortedPaydays().join('\n'); dailyFoodAmount.value = Number(state.settings.dailyFoodAmount || 0).toFixed(2); dailyPetrolAmount.value = Number(state.settings.dailyPetrolAmount || 0).toFixed(2); recurringList.innerHTML='';
+    state.recurringPayments.forEach(payment=>{ const row=document.createElement('article'); row.className='payment-card'; row.innerHTML=`<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · Recurring every payday period</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}"><button class="check ${payment.active!==false?'on':''}">${payment.active!==false?'✓':''}</button><button class="danger">×</button>`; row.querySelector('.amount-input').onchange=e=>{payment.amount=parseMoney(e.target.value); e.target.value=formatMoney(payment.amount); apiSave();}; row.querySelector('.check').onclick=()=>{payment.active=payment.active===false; apiSave(); renderSettings();}; row.querySelector('.danger').onclick=()=>{state.recurringPayments=state.recurringPayments.filter(p=>p.id!==payment.id); apiSave(); renderSettings();}; recurringList.appendChild(row); });
   }
 
   function setView(view){
@@ -713,11 +737,11 @@
   topAddPayment.onclick = ()=>{ addPanel.classList.toggle('open'); if(addPanel.classList.contains('open')) newName.focus(); };
   addPayment.onclick = ()=>{ const data=ensurePayday(); const name=newName.value.trim(); if(!name) return; data.payments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(newAmount.value||0), day:Math.max(1,Math.min(31,Number(newDay.value||1))), paid:false}); newName.value=newAmount.value=newDay.value=''; addPanel.classList.remove('open'); apiSave(); render(); };
   addRecurring.onclick = ()=>{ const name=recName.value.trim(); if(!name) return; state.recurringPayments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(recAmount.value||0), day:Math.max(1,Math.min(31,Number(recDay.value||1))), active:true}); recName.value=recAmount.value=recDay.value=''; apiSave(); renderSettings(); };
-  saveSettings.onclick = ()=>{ state.settings.paydays = paydaysInput.value.split(/\s+/).filter(Boolean).sort(); currentPayday = nearestPayday(); apiSave(); render(); };
+  saveSettings.onclick = ()=>{ state.settings.paydays = paydaysInput.value.split(/\s+/).filter(Boolean).sort(); state.settings.dailyFoodAmount = parseMoney(dailyFoodAmount.value); state.settings.dailyPetrolAmount = parseMoney(dailyPetrolAmount.value); currentPayday = nearestPayday(); syncAutomaticPayments(); apiSave(); render(); };
   openSettings.onclick = ()=>{ setView('settings'); };
   document.querySelectorAll('.bottom-nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 
-  fetch('api/budget').then(r=>r.json()).then(data=>{ state=data; currentPayday=nearestPayday(); render(); });
+  fetch('api/budget').then(r=>r.json()).then(data=>{ state=data; state.settings ||= {}; state.settings.dailyFoodAmount ??= 15; state.settings.dailyPetrolAmount ??= 3.71; currentPayday=nearestPayday(); render(); });
 </script>
 </body>
 </html>
