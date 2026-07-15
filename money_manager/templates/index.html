@@ -612,7 +612,7 @@
   let activeView = 'overview';
 
   async function apiSave(){
-    await fetch('/api/budget', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state)});
+    await fetch('api/budget', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state)});
   }
 
   function sortedPaydays(){
@@ -717,7 +717,7 @@
   openSettings.onclick = ()=>{ setView('settings'); };
   document.querySelectorAll('.bottom-nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 
-  fetch('/api/budget').then(r=>r.json()).then(data=>{ state=data; currentPayday=nearestPayday(); render(); });
+  fetch('api/budget').then(r=>r.json()).then(data=>{ state=data; currentPayday=nearestPayday(); render(); });
 </script>
 </body>
 </html>
