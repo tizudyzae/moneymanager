@@ -28,3 +28,17 @@ def test_budget_api_persists_payday_data_and_recurring_payments(tmp_path):
         saved = client.get("/api/budget").get_json()
         assert saved["settings"]["paydays"] == ["2026-07-23", "2026-08-28"]
         assert any(payment["id"] == "test-recurring" for payment in saved["recurringPayments"])
+
+
+def test_budget_defaults_and_migrates_to_july_2026_payday(tmp_path):
+    money_app.DB_PATH = tmp_path / "money_manager.db"
+
+    with money_app.app.test_client() as client:
+        data = client.get("/api/budget").get_json()
+        assert data["settings"]["paydays"] == ["2026-07-23"]
+
+        data["settings"]["paydays"] = ["2026-07-01"]
+        client.put("/api/budget", json=data)
+
+        saved = client.get("/api/budget").get_json()
+        assert saved["settings"]["paydays"] == ["2026-07-01", "2026-07-23"]

@@ -226,6 +226,10 @@
       background:#f7fbf9;
     }
 
+    .payment-card.auto-payment{
+      grid-template-columns:48px minmax(0,1fr) auto 26px;
+    }
+
     .payment-icon{
       width:46px;height:46px;border-radius:50%;
       display:grid;place-items:center;
@@ -452,6 +456,7 @@
         grid-template-columns:52px minmax(0,1fr) 130px 38px 28px;
         padding:14px 16px;
       }
+      .payment-card.auto-payment{grid-template-columns:52px minmax(0,1fr) 130px 28px}
       .amount-input{width:120px}
       .floating-summary{bottom:24px}
       .bottom-nav{display:none}
@@ -461,6 +466,7 @@
       .month-title{font-size:22px;min-width:125px}
       .filter-tabs button{padding:7px 11px;font-size:13px}
       .payment-card{grid-template-columns:46px minmax(0,1fr) 86px 30px 22px;gap:9px}
+      .payment-card.auto-payment{grid-template-columns:46px minmax(0,1fr) 86px 22px}
       .amount-input{width:86px;font-size:16px}
       .payment-editor,.add-payment-panel{grid-template-columns:1fr 1fr}
       .summary-label{font-size:11px}
@@ -690,7 +696,7 @@
     const filtered = data.payments.filter(p => activeFilter === 'all' || (activeFilter === 'paid' ? p.paid : !p.paid)).sort((a,b)=>Number(a.paid)-Number(b.paid) || dueDate(a.day)-dueDate(b.day));
     if(!filtered.length){ list.innerHTML = `<div class="empty">No ${activeFilter === 'all' ? '' : activeFilter} payments for this payday.</div>`; return; }
     filtered.forEach(payment=>{
-      const row = document.createElement('article'); row.className = `payment-card ${payment.paid ? 'paid' : ''}`;
+      const row = document.createElement('article'); row.className = `payment-card ${payment.paid ? 'paid' : ''} ${isAutoDailyPayment(payment) ? 'auto-payment' : ''}`;
       row.innerHTML = `<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · ${dueText(payment.day,payment.paid)}${isAutoDailyPayment(payment) ? ` · ${daysLeftInPayCycle()} days × ${formatMoney(dailyAmountFor(payment))}` : ''}</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}>${isAutoDailyPayment(payment) ? '' : `<button class="check ${payment.paid?'on':''}">${payment.paid?'✓':''}</button>`}<button class="more">⋮</button><div class="payment-editor"><input class="edit-name" value="${payment.name}" ${isAutoDailyPayment(payment) ? 'readonly' : ''}><input class="edit-day" type="number" min="1" max="31" value="${payment.day}"><input class="edit-amount" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}><button class="danger">Delete</button></div>`;
       row.querySelector('.amount-input').onchange = e => { if(isAutoDailyPayment(payment) || payment.paid) return; payment.amount = parseMoney(e.target.value); apiSave(); updateSummary(); renderPayments(); };
       const checkButton = row.querySelector('.check');
