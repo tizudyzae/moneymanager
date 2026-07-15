@@ -619,11 +619,13 @@
   const dailyAmountFor = payment => String(payment.name || '').trim().toLowerCase() === 'food' ? Number(state.settings.dailyFoodAmount || 0) : Number(state.settings.dailyPetrolAmount || 0);
   function daysLeftInPayCycle(){
     const today = new Date(); today.setHours(0,0,0,0);
-    const payday = parseLocalDate(currentPayday); payday.setHours(0,0,0,0);
+    const nextPayday = nextPaydayAfterToday();
+    if(!nextPayday) return 0;
+    const payday = parseLocalDate(nextPayday); payday.setHours(0,0,0,0);
     return Math.max(0, Math.ceil((payday - today) / 86400000));
   }
   function isCurrentPaydayPeriod(){
-    return currentPayday === nearestPayday();
+    return currentPayday === currentPaydayPeriod();
   }
   function recurringAmountFor(payment){
     const recurring = state.recurringPayments.find(item => item.id === payment.recurringId || String(item.name || '').trim().toLowerCase() === String(payment.name || '').trim().toLowerCase());
@@ -656,10 +658,19 @@
     return [...new Set(state.settings.paydays)].filter(Boolean).sort();
   }
 
-  function nearestPayday(){
+  function currentPaydayPeriod(){
     const today = dateKey(new Date());
     const paydays = sortedPaydays();
-    return paydays.find(day => day >= today) || paydays.at(-1) || today;
+    return [...paydays].reverse().find(day => day <= today) || paydays.find(day => day > today) || today;
+  }
+
+  function nextPaydayAfterToday(){
+    const today = dateKey(new Date());
+    return sortedPaydays().find(day => day > today);
+  }
+
+  function nearestPayday(){
+    return currentPaydayPeriod();
   }
 
   function ensurePayday(){
