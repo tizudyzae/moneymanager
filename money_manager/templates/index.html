@@ -1,127 +1,794 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Untitled spreadsheet</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7f9fc" />
+  <title>Expense Tracker Prototype</title>
+  <style>
+    :root{
+      --bg:#f7f9fc;
+      --card:#ffffff;
+      --text:#15203a;
+      --muted:#73809a;
+      --line:#e3e8f1;
+      --purple:#5b5bf5;
+      --purple-soft:#eeedff;
+      --green:#10a56f;
+      --red:#ef4e4e;
+      --orange:#ff8a32;
+      --shadow:0 14px 40px rgba(25,39,75,.10);
+      --radius:22px;
+    }
+
+    *{box-sizing:border-box}
+    html{background:var(--bg)}
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      padding-bottom:190px;
+    }
+
+    button,input{font:inherit}
+    button{cursor:pointer}
+
+    .desktop-sidebar{display:none}
+
+    .app-shell{
+      width:min(100%,900px);
+      margin:0 auto;
+      padding:18px 18px 40px;
+    }
+
+    .mobile-header{
+      position:sticky;
+      top:0;
+      z-index:20;
+      display:grid;
+      grid-template-columns:44px 1fr 44px;
+      align-items:center;
+      gap:10px;
+      padding:calc(10px + env(safe-area-inset-top)) 0 14px;
+      background:rgba(247,249,252,.92);
+      backdrop-filter:blur(16px);
+    }
+
+    .icon-btn{
+      width:44px;height:44px;border:0;border-radius:14px;
+      display:grid;place-items:center;
+      background:transparent;color:var(--text);
+      font-size:24px;
+    }
+
+    .add-btn{
+      background:var(--purple);
+      color:white;
+      box-shadow:0 10px 24px rgba(91,91,245,.30);
+      font-size:30px;
+      font-weight:300;
+    }
+
+    .month-control{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:12px;
+    }
+
+    .month-control button{
+      width:34px;height:34px;border:0;background:transparent;
+      font-size:28px;color:var(--text);
+    }
+
+    .month-title{
+      min-width:145px;
+      text-align:center;
+      font-weight:850;
+      font-size:25px;
+      letter-spacing:-.03em;
+    }
+
+    .section{
+      margin-top:22px;
+    }
+
+    .section-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:14px;
+    }
+
+    .section-head h2{
+      margin:0;
+      font-size:20px;
+      letter-spacing:-.02em;
+    }
+
+    .accounts-scroll{
+      display:grid;
+      grid-auto-flow:column;
+      grid-auto-columns:minmax(210px,72%);
+      gap:12px;
+      overflow-x:auto;
+      padding-bottom:4px;
+      scroll-snap-type:x mandatory;
+      scrollbar-width:none;
+    }
+    .accounts-scroll::-webkit-scrollbar{display:none}
+
+    .account-card{
+      scroll-snap-align:start;
+      border:1px solid var(--line);
+      background:var(--card);
+      border-radius:20px;
+      padding:18px;
+      min-height:210px;
+      box-shadow:0 8px 22px rgba(35,49,85,.04);
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+    }
+
+    .account-top{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+    }
+
+    .account-logo{
+      width:54px;height:54px;border-radius:50%;
+      display:grid;place-items:center;
+      font-weight:900;font-size:20px;
+    }
+
+    .fd{background:#090909;color:white}
+    .ll{background:#c9f4de;color:#122a24}
+    .ba{background:#d7f3ff;color:#0694d9}
+
+    .menu-dots{
+      border:0;background:transparent;color:#8490a6;
+      font-size:26px;line-height:1;
+    }
+
+    .account-name{
+      font-size:18px;
+      font-weight:750;
+      margin-bottom:8px;
+    }
+
+    .balance-input{
+      width:100%;
+      border:0;
+      padding:0;
+      background:transparent;
+      color:var(--text);
+      font-size:28px;
+      font-weight:850;
+      outline:none;
+    }
+
+    .available{
+      margin-top:8px;
+      font-size:15px;
+      font-weight:700;
+      color:var(--green);
+    }
+
+    .filter-tabs{
+      display:flex;
+      gap:8px;
+      background:#f1f3f7;
+      border-radius:999px;
+      padding:4px;
+    }
+
+    .filter-tabs button{
+      border:0;
+      background:transparent;
+      color:#4d5870;
+      padding:8px 15px;
+      border-radius:999px;
+      font-size:14px;
+    }
+
+    .filter-tabs button.active{
+      background:var(--purple-soft);
+      color:var(--purple);
+      font-weight:750;
+    }
+
+    .payments{
+      display:grid;
+      gap:9px;
+    }
+
+    .payment-card{
+      display:grid;
+      grid-template-columns:48px minmax(0,1fr) auto 34px 26px;
+      align-items:center;
+      gap:12px;
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:13px 12px;
+      min-height:82px;
+      box-shadow:0 5px 16px rgba(35,49,85,.035);
+    }
+
+    .payment-card.paid{
+      opacity:.68;
+      background:#f7fbf9;
+    }
+
+    .payment-icon{
+      width:46px;height:46px;border-radius:50%;
+      display:grid;place-items:center;
+      background:#fff0e6;color:var(--orange);
+      font-size:19px;font-weight:850;
+    }
+
+    .payment-card:nth-child(3n+2) .payment-icon{background:#eeebff;color:var(--purple)}
+    .payment-card:nth-child(3n+3) .payment-icon{background:#e4f7ff;color:#149bd1}
+
+    .payment-copy{min-width:0}
+    .payment-name{
+      font-size:16px;
+      font-weight:780;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+
+    .payment-meta{
+      margin-top:5px;
+      color:var(--red);
+      font-size:13px;
+    }
+
+    .payment-card.paid .payment-meta{color:var(--green)}
+
+    .amount-input{
+      width:94px;
+      border:0;
+      background:transparent;
+      text-align:right;
+      font-size:17px;
+      font-weight:800;
+      color:var(--text);
+      padding:4px;
+    }
+
+    .check{
+      width:28px;height:28px;
+      border:2px solid #b7c0cf;
+      border-radius:7px;
+      background:white;
+      display:grid;place-items:center;
+      color:white;
+      padding:0;
+      font-size:17px;
+    }
+
+    .check.on{
+      background:var(--green);
+      border-color:var(--green);
+    }
+
+    .more{
+      border:0;background:transparent;color:#8a95a9;
+      font-size:22px;padding:0;
+    }
+
+    .payment-editor{
+      grid-column:2 / -1;
+      display:none;
+      grid-template-columns:1fr 110px 110px auto;
+      gap:8px;
+      padding-top:10px;
+      border-top:1px solid var(--line);
+    }
+
+    .payment-card.editing .payment-editor{display:grid}
+
+    .payment-editor input{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:9px 10px;
+      background:white;
+    }
+
+    .danger{
+      border:0;border-radius:10px;
+      padding:9px 12px;
+      background:#fff0f0;color:var(--red);
+    }
+
+    .add-payment-panel{
+      display:none;
+      margin-top:12px;
+      padding:14px;
+      border:1px solid var(--line);
+      border-radius:18px;
+      background:white;
+      grid-template-columns:1fr 110px 100px auto;
+      gap:9px;
+    }
+    .add-payment-panel.open{display:grid}
+    .add-payment-panel input{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:11px;
+      padding:10px;
+    }
+
+    .primary{
+      border:0;
+      border-radius:11px;
+      background:var(--purple);
+      color:white;
+      padding:10px 14px;
+      font-weight:750;
+    }
+
+    .empty{
+      border:1px dashed #cfd6e3;
+      border-radius:18px;
+      padding:30px 18px;
+      text-align:center;
+      color:var(--muted);
+      background:white;
+    }
+
+    .month-history{
+      display:flex;
+      gap:8px;
+      overflow-x:auto;
+      padding-bottom:4px;
+      scrollbar-width:none;
+    }
+    .month-history::-webkit-scrollbar{display:none}
+    .month-pill{
+      white-space:nowrap;
+      border:1px solid var(--line);
+      background:white;
+      border-radius:999px;
+      padding:8px 12px;
+      color:var(--muted);
+    }
+    .month-pill.active{
+      background:var(--purple);
+      color:white;
+      border-color:var(--purple);
+    }
+
+    .floating-summary{
+      position:fixed;
+      left:50%;
+      bottom:76px;
+      transform:translateX(-50%);
+      z-index:40;
+      width:min(calc(100% - 24px),880px);
+      background:rgba(255,255,255,.97);
+      backdrop-filter:blur(20px);
+      border:1px solid rgba(224,229,239,.95);
+      border-radius:24px;
+      box-shadow:0 16px 40px rgba(25,39,75,.18);
+      padding:16px 14px 14px;
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+    }
+
+    .summary-grab{
+      position:absolute;
+      left:50%;top:6px;transform:translateX(-50%);
+      width:46px;height:5px;border-radius:999px;background:#d8dde7;
+    }
+
+    .summary-item{
+      padding:14px 8px 6px;
+      text-align:center;
+      min-width:0;
+    }
+    .summary-item + .summary-item{border-left:1px solid var(--line)}
+    .summary-label{font-size:12px;color:var(--muted)}
+    .summary-value{
+      margin-top:6px;
+      font-size:21px;
+      font-weight:900;
+      letter-spacing:-.04em;
+      white-space:nowrap;
+    }
+    .summary-sub{
+      margin-top:5px;
+      font-size:11px;
+      color:#8a95a8;
+    }
+    .summary-item:nth-child(2) .summary-value{color:var(--red)}
+    .summary-item:nth-child(3) .summary-value{color:var(--green)}
+
+    .bottom-nav{
+      position:fixed;
+      left:0;right:0;bottom:0;
+      z-index:35;
+      height:72px;
+      padding-bottom:env(safe-area-inset-bottom);
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      background:rgba(255,255,255,.97);
+      backdrop-filter:blur(18px);
+      border-top:1px solid var(--line);
+    }
+
+    .bottom-nav button{
+      border:0;background:transparent;color:#69768f;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:4px;font-size:12px;
+    }
+    .bottom-nav button.active{color:var(--purple)}
+    .nav-icon{font-size:22px}
+
+    @media (min-width:760px){
+      body{padding-bottom:170px}
+      .app-shell{padding:28px 28px 50px}
+      .accounts-scroll{
+        grid-auto-flow:initial;
+        grid-template-columns:repeat(3,1fr);
+        overflow:visible;
+      }
+      .account-card{min-height:220px}
+      .payment-card{
+        grid-template-columns:52px minmax(0,1fr) 130px 38px 28px;
+        padding:14px 16px;
+      }
+      .amount-input{width:120px}
+      .floating-summary{bottom:24px}
+      .bottom-nav{display:none}
+    }
+
+    @media (max-width:520px){
+      .month-title{font-size:22px;min-width:125px}
+      .filter-tabs button{padding:7px 11px;font-size:13px}
+      .payment-card{grid-template-columns:46px minmax(0,1fr) 86px 30px 22px;gap:9px}
+      .amount-input{width:86px;font-size:16px}
+      .payment-editor,.add-payment-panel{grid-template-columns:1fr 1fr}
+      .summary-label{font-size:11px}
+      .summary-value{font-size:18px}
+      .summary-sub{display:none}
+    }
+  </style>
 </head>
 <body>
-  <header class="chrome">
-    <div class="titlebar">
-      <div class="sheets-icon">▰</div>
-      <span class="doc-title">Untitled spreadsheet</span>
-      <span class="star">☆</span>
-      <span class="cloud">☁</span>
-      <span class="version">v{{ version }}</span>
-      <button class="share">Share</button>
-    </div>
-    <nav class="menubar" aria-label="Google Sheets style menu">
-      <span>File</span><span>Edit</span><span>View</span><span>Insert</span><span>Format</span><span>Data</span><span>Tools</span><span>Extensions</span><span>Help</span>
-    </nav>
-    <div class="toolbar" aria-label="Spreadsheet toolbar">
-      <button>↶</button><button>↷</button><button>🖨</button><button>100%</button><button>£</button><button>%</button><button>.0</button><button>123</button>
-      <select><option>Trebuchet MS</option><option>Calibri</option></select><button>−</button><button>11</button><button>+</button><button><b>B</b></button><button><i>I</i></button><button>☰</button><button>Σ</button>
-    </div>
-    <div class="formula"><span id="name-box">A1</span><span class="fx">fx</span><input id="formula-input" aria-label="Formula bar"></div>
-  </header>
+  <main class="app-shell">
+    <header class="mobile-header">
+      <button class="icon-btn" aria-label="Menu">☰</button>
+      <div class="month-control">
+        <button id="prevMonth" aria-label="Previous month">‹</button>
+        <div class="month-title" id="monthLabel"></div>
+        <button id="nextMonth" aria-label="Next month">›</button>
+      </div>
+      <button class="icon-btn add-btn" id="topAddPayment" aria-label="Add payment">+</button>
+    </header>
 
-  <main class="workbook">
-    {% for sheet in sheets %}
-    <section class="sheet-panel {{ 'active' if loop.first else '' }}" data-sheet="{{ sheet.slug }}" aria-label="{{ sheet.title }} sheet">
-      <div class="grid-wrap">
-        <table class="grid" style="--cols: {{ sheet.cols }}">
-          <colgroup>
-            <col class="rownums">
-            {% for i in range(sheet.cols) %}
-              {% set letter = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i] %}
-              <col style="width: {{ sheet.col_widths.get(letter, 72) }}px">
-            {% endfor %}
-          </colgroup>
-          <thead><tr><th class="corner"></th>{% for i in range(sheet.cols) %}<th>{{ 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i] }}</th>{% endfor %}</tr></thead>
-          <tbody>
-          {% for row in range(1, sheet.rows + 1) %}
-            <tr><th class="rowhead">{{ row }}</th>
-            {% for col in range(sheet.cols) %}
-              {% set key = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[col] ~ row %}
-              {% set cell = sheet.cells.get(key, {}) %}
-              <td class="cell {{ cell.get('class', '') }}" data-cell="{{ key }}" data-formula="{{ cell.get('formula', '') }}" contenteditable="{{ 'true' if cell.get('editable', True) else 'false' }}">{{ cell.get('value', '') }}</td>
-            {% endfor %}
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
+    <section class="section">
+      <div class="section-head">
+        <h2>Accounts</h2>
+      </div>
+
+      <div class="accounts-scroll">
+        <article class="account-card">
+          <div class="account-top">
+            <div class="account-logo fd">fd</div>
+            <button class="menu-dots" aria-label="Account menu">⋮</button>
+          </div>
+          <div>
+            <div class="account-name">First Direct</div>
+            <input class="balance-input" id="firstDirect" type="number" step="0.01" />
+            <div class="available">Available</div>
+          </div>
+        </article>
+
+        <article class="account-card">
+          <div class="account-top">
+            <div class="account-logo ll">L</div>
+            <button class="menu-dots" aria-label="Account menu">⋮</button>
+          </div>
+          <div>
+            <div class="account-name">Lloyds</div>
+            <input class="balance-input" id="lloyds" type="number" step="0.01" />
+            <div class="available">Available</div>
+          </div>
+        </article>
+
+        <article class="account-card">
+          <div class="account-top">
+            <div class="account-logo ba">B</div>
+            <button class="menu-dots" aria-label="Account menu">⋮</button>
+          </div>
+          <div>
+            <div class="account-name">Barclays</div>
+            <input class="balance-input" id="barclays" type="number" step="0.01" />
+            <div class="available">Available</div>
+          </div>
+        </article>
       </div>
     </section>
-    {% endfor %}
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Payments</h2>
+        <div class="filter-tabs">
+          <button class="active" data-filter="all">All</button>
+          <button data-filter="upcoming">Upcoming</button>
+          <button data-filter="paid">Paid</button>
+        </div>
+      </div>
+
+      <div class="payments" id="paymentsList"></div>
+
+      <div class="add-payment-panel" id="addPanel">
+        <input id="newName" placeholder="Payment name" />
+        <input id="newAmount" type="number" step="0.01" placeholder="Amount" />
+        <input id="newDay" type="number" min="1" max="31" placeholder="Due day" />
+        <button class="primary" id="addPayment">Add</button>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Month history</h2>
+      </div>
+      <div class="month-history" id="monthHistory"></div>
+    </section>
   </main>
 
-  <footer class="tabs">
-    <button class="add-tab">+</button><button class="hamburger">☰</button>
-    {% for sheet in sheets %}<button class="tab {{ 'active' if loop.first else '' }}" data-target="{{ sheet.slug }}">{{ sheet.title }}</button>{% endfor %}
-    <button class="tab ghost">23>Jul</button><button class="tab ghost">25>Jun</button><button class="tab ghost">Sheet5</button>
-    <button id="reset" class="reset">Reset saved edits</button>
-  </footer>
+  <aside class="floating-summary" aria-label="Budget totals">
+    <div class="summary-grab"></div>
+    <div class="summary-item">
+      <div class="summary-label">Total Available</div>
+      <div class="summary-value" id="totalAvailable">£0.00</div>
+      <div class="summary-sub">Across 3 accounts</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Left To Pay</div>
+      <div class="summary-value" id="leftToPay">£0.00</div>
+      <div class="summary-sub" id="remainingPayments">0 payments</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Projected Leftover</div>
+      <div class="summary-value" id="leftover">£0.00</div>
+      <div class="summary-sub">After all payments</div>
+    </div>
+  </aside>
+
+  <nav class="bottom-nav" aria-label="Main navigation">
+    <button class="active"><span class="nav-icon">⌂</span><span>Overview</span></button>
+    <button><span class="nav-icon">▣</span><span>Calendar</span></button>
+    <button><span class="nav-icon">↶</span><span>History</span></button>
+    <button><span class="nav-icon">⚙</span><span>Settings</span></button>
+  </nav>
 
 <script>
-const panels = [...document.querySelectorAll('.sheet-panel')];
-const tabs = [...document.querySelectorAll('.tab[data-target]')];
-const nameBox = document.getElementById('name-box');
-const formulaInput = document.getElementById('formula-input');
-let activeCell = document.querySelector('.cell');
+  const formatMoney = value => new Intl.NumberFormat('en-GB', {
+    style:'currency', currency:'GBP'
+  }).format(Number(value || 0));
 
-function setActive(cell) {
-  if (!cell) return;
-  document.querySelectorAll('.cell.selected').forEach(c => c.classList.remove('selected'));
-  activeCell = cell;
-  cell.classList.add('selected');
-  nameBox.textContent = cell.dataset.cell;
-  formulaInput.value = cell.dataset.formula || cell.textContent.trim();
-}
+  const pad = n => String(n).padStart(2,'0');
+  const monthKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+  const monthName = d => d.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
 
-tabs.forEach(tab => tab.addEventListener('click', () => {
-  tabs.forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  panels.forEach(panel => panel.classList.toggle('active', panel.dataset.sheet === tab.dataset.target));
-  setActive(document.querySelector(`.sheet-panel[data-sheet="${tab.dataset.target}"] .cell`));
-}));
+  const defaultPayments = [
+    ['Rent',466.67,31],['Council Tax',94.91,1],['Internet',10,5],['Energy',139.97,6],
+    ['Water',42.67,6],['Energy Credit',-93.91,6],['Car Tax',17.50,2],['AA',13.01,1],
+    ['Admiral',49.55,12],['Petrol',105,1],['Barclayloan',92.83,31],['iCloud Drive',8.99,2],
+    ['Vodafone',12,5],['Food',420,1],['YouTube Premium',12.99,25],['Google Drive',1.59,1],
+    ['First Direct',7.29,2],['Apple Care',11.99,2],['Barclaycard',92.07,18],
+    ['PureGym',21.99,1],['ChatGPT',17.97,1],['PayPal',24.91,1]
+  ].map((p,i)=>({
+    id:crypto.randomUUID?.() || `${Date.now()}-${i}`,
+    name:p[0], amount:p[1], day:p[2], paid:false
+  }));
 
-document.querySelectorAll('.cell').forEach(cell => {
-  cell.addEventListener('focus', () => setActive(cell));
-  cell.addEventListener('click', () => setActive(cell));
-  cell.addEventListener('input', () => {
-    formulaInput.value = cell.textContent.trim();
-    cell.classList.add('dirty');
+  let current = new Date(2026,6,1);
+  let activeFilter = 'all';
+  let state = JSON.parse(localStorage.getItem('expenseTrackerData') || '{}');
+
+  function ensureMonth(){
+    const key = monthKey(current);
+    if(!state[key]){
+      const previous = new Date(current.getFullYear(), current.getMonth()-1, 1);
+      const previousData = state[monthKey(previous)];
+      state[key] = {
+        balances:{firstDirect:0,lloyds:0,barclays:0},
+        payments: previousData
+          ? previousData.payments.map(p=>({...p,id:crypto.randomUUID?.()||String(Math.random()),paid:false}))
+          : JSON.parse(JSON.stringify(defaultPayments))
+      };
+      save();
+    }
+    return state[key];
+  }
+
+  function save(){
+    localStorage.setItem('expenseTrackerData',JSON.stringify(state));
+  }
+
+  function dueText(day, paid){
+    const due = new Date(current.getFullYear(), current.getMonth(), Math.min(Number(day)||1,31));
+    return `${paid ? 'Paid' : 'Due'} ${due.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
+  }
+
+  function render(){
+    const data = ensureMonth();
+    document.getElementById('monthLabel').textContent = monthName(current);
+
+    ['firstDirect','lloyds','barclays'].forEach(id=>{
+      const input = document.getElementById(id);
+      input.value = Number(data.balances[id] || 0).toFixed(2);
+      input.onfocus = () => input.select();
+      input.oninput = e => {
+        data.balances[id] = Number(e.target.value || 0);
+        save();
+        updateSummary();
+      };
+      input.onblur = () => input.value = Number(data.balances[id] || 0).toFixed(2);
+    });
+
+    renderPayments();
+    updateSummary();
+    renderHistory();
+  }
+
+  function renderPayments(){
+    const data = ensureMonth();
+    const list = document.getElementById('paymentsList');
+    list.innerHTML = '';
+
+    const filtered = data.payments
+      .filter(p => activeFilter === 'all' || (activeFilter === 'paid' ? p.paid : !p.paid))
+      .sort((a,b)=>Number(a.paid)-Number(b.paid) || a.day-b.day);
+
+    if(!filtered.length){
+      list.innerHTML = `<div class="empty">No ${activeFilter === 'all' ? '' : activeFilter} payments for this month.</div>`;
+      return;
+    }
+
+    filtered.forEach(payment=>{
+      const row = document.createElement('article');
+      row.className = `payment-card ${payment.paid ? 'paid' : ''}`;
+      row.innerHTML = `
+        <div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div>
+        <div class="payment-copy">
+          <div class="payment-name">${payment.name}${payment.day ? ` (${payment.day})` : ''}</div>
+          <div class="payment-meta">${dueText(payment.day,payment.paid)}</div>
+        </div>
+        <input class="amount-input" type="number" step="0.01" value="${Number(payment.amount).toFixed(2)}" aria-label="${payment.name} amount">
+        <button class="check ${payment.paid?'on':''}" aria-label="Mark ${payment.name} paid">${payment.paid?'✓':''}</button>
+        <button class="more" aria-label="Edit ${payment.name}">⋮</button>
+        <div class="payment-editor">
+          <input class="edit-name" value="${payment.name}" aria-label="Payment name">
+          <input class="edit-day" type="number" min="1" max="31" value="${payment.day}" aria-label="Due day">
+          <input class="edit-amount" type="number" step="0.01" value="${payment.amount}" aria-label="Amount">
+          <button class="danger">Delete</button>
+        </div>
+      `;
+
+      row.querySelector('.amount-input').onchange = e => {
+        payment.amount = Number(e.target.value || 0);
+        save(); updateSummary(); renderPayments();
+      };
+
+      row.querySelector('.check').onclick = () => {
+        payment.paid = !payment.paid;
+        save(); render();
+      };
+
+      row.querySelector('.more').onclick = () => {
+        row.classList.toggle('editing');
+      };
+
+      row.querySelector('.edit-name').onchange = e => {
+        payment.name = e.target.value.trim() || payment.name;
+        save(); renderPayments();
+      };
+      row.querySelector('.edit-day').onchange = e => {
+        payment.day = Math.max(1,Math.min(31,Number(e.target.value || 1)));
+        save(); renderPayments();
+      };
+      row.querySelector('.edit-amount').onchange = e => {
+        payment.amount = Number(e.target.value || 0);
+        save(); render();
+      };
+      row.querySelector('.danger').onclick = () => {
+        data.payments = data.payments.filter(p=>p.id!==payment.id);
+        save(); render();
+      };
+
+      list.appendChild(row);
+    });
+  }
+
+  function updateSummary(){
+    const data = ensureMonth();
+    const totalAvailable = Object.values(data.balances).reduce((a,b)=>a+Number(b||0),0);
+    const unpaidPayments = data.payments.filter(p=>!p.paid);
+    const leftToPay = unpaidPayments.reduce((a,p)=>a+Number(p.amount||0),0);
+
+    document.getElementById('totalAvailable').textContent = formatMoney(totalAvailable);
+    document.getElementById('leftToPay').textContent = formatMoney(leftToPay);
+    document.getElementById('leftover').textContent = formatMoney(totalAvailable-leftToPay);
+    document.getElementById('remainingPayments').textContent =
+      `${unpaidPayments.length} payment${unpaidPayments.length===1?'':'s'}`;
+  }
+
+  function renderHistory(){
+    const history = document.getElementById('monthHistory');
+    history.innerHTML = '';
+    Object.keys(state).sort().forEach(key=>{
+      const [y,m] = key.split('-').map(Number);
+      const d = new Date(y,m-1,1);
+      const btn = document.createElement('button');
+      btn.className = `month-pill ${key===monthKey(current)?'active':''}`;
+      btn.textContent = monthName(d);
+      btn.onclick = ()=>{current=d;render();};
+      history.appendChild(btn);
+    });
+  }
+
+  document.getElementById('prevMonth').onclick = ()=>{
+    current=new Date(current.getFullYear(),current.getMonth()-1,1);
+    render();
+  };
+
+  document.getElementById('nextMonth').onclick = ()=>{
+    current=new Date(current.getFullYear(),current.getMonth()+1,1);
+    render();
+  };
+
+  document.querySelectorAll('.filter-tabs button').forEach(button=>{
+    button.onclick = ()=>{
+      activeFilter = button.dataset.filter;
+      document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active'));
+      button.classList.add('active');
+      renderPayments();
+    };
   });
-  cell.addEventListener('blur', async () => {
-    if (!cell.classList.contains('dirty')) return;
-    cell.classList.remove('dirty');
-    const panel = cell.closest('.sheet-panel');
-    await fetch('/api/cell', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({sheet: panel.dataset.sheet, cell: cell.dataset.cell, value: cell.textContent.trim()})});
-  });
-  cell.addEventListener('keydown', event => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    cell.blur();
-    const next = cell.closest('tr')?.nextElementSibling?.children[cell.cellIndex];
-    if (next?.classList.contains('cell')) next.focus();
-  });
-});
 
-formulaInput.addEventListener('keydown', event => {
-  if (event.key !== 'Enter' || !activeCell) return;
-  activeCell.textContent = formulaInput.value;
-  activeCell.classList.add('dirty');
-  activeCell.blur();
-});
+  document.getElementById('topAddPayment').onclick = ()=>{
+    document.getElementById('addPanel').classList.toggle('open');
+    if(document.getElementById('addPanel').classList.contains('open')){
+      document.getElementById('newName').focus();
+    }
+  };
 
-document.getElementById('reset').addEventListener('click', async () => {
-  if (!confirm('Reset saved cell edits back to the spreadsheet template?')) return;
-  await fetch('/api/reset', {method: 'POST'});
-  location.reload();
-});
+  document.getElementById('addPayment').onclick = ()=>{
+    const data = ensureMonth();
+    const name = document.getElementById('newName').value.trim();
+    const amount = Number(document.getElementById('newAmount').value || 0);
+    const day = Math.max(1,Math.min(31,Number(document.getElementById('newDay').value || 1)));
+    if(!name) return;
 
-setActive(activeCell);
+    data.payments.push({
+      id:crypto.randomUUID?.() || String(Date.now()),
+      name, amount, day, paid:false
+    });
+
+    document.getElementById('newName').value='';
+    document.getElementById('newAmount').value='';
+    document.getElementById('newDay').value='';
+    document.getElementById('addPanel').classList.remove('open');
+    save();
+    render();
+  };
+
+  render();
 </script>
 </body>
 </html>
