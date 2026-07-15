@@ -1,6 +1,6 @@
 name: "Money Manager"
 description: "Personal budgeting, spending, and wage tracker for Home Assistant."
-version: "0.1.6"
+version: "0.1.7"
 slug: "money_manager"
 init: false
 arch:
