@@ -31,3 +31,41 @@ def test_default_sheet_matches_visible_july_left_to_pay():
 
     assert round(sheet["totals_left"]["jul"], 2) == 1753.93
     assert round(sheet["pre_paid"]["jul"], 2) == 182.07
+
+
+def test_wage_forecast_uses_four_weeks_and_night_premium_formula():
+    weeks = [
+        {"basicHours": 40, "basicMinutes": 0, "nightHours": 6, "nightMinutes": 0},
+        {"basicHours": 38, "basicMinutes": 30, "nightHours": 3, "nightMinutes": 30},
+        {"basicHours": 0, "basicMinutes": 0, "nightHours": 0, "nightMinutes": 0},
+        {"basicHours": 20, "basicMinutes": 15, "nightHours": 1, "nightMinutes": 45},
+    ]
+    settings = {"hourlyRate": 15, "payePercent": 10, "niPercent": 8, "fixedDeductions": 25}
+
+    result = money_core.calculate_wage_forecast(weeks, settings)
+
+    expected_basic = (40 + 38.5 + 20.25) * 15
+    expected_night = (6 + 3.5 + 1.75) * 15 / 3
+    expected_gross = expected_basic + expected_night
+    assert len(result["weeks"]) == 4
+    assert round(result["gross"], 2) == round(expected_gross, 2)
+    assert round(result["paye"], 2) == round(expected_gross * 0.10, 2)
+    assert round(result["ni"], 2) == round(expected_gross * 0.08, 2)
+    assert round(result["net"], 2) == round(expected_gross - expected_gross * 0.18 - 25, 2)
+
+
+def test_wage_forecast_clamps_invalid_values():
+    result = money_core.calculate_wage_forecast(
+        [{"basicHours": -10, "basicMinutes": 99, "nightHours": -1, "nightMinutes": 75}],
+        {"hourlyRate": -5, "payePercent": 120, "niPercent": -3, "fixedDeductions": -20},
+    )
+
+    assert len(result["weeks"]) == 4
+    assert result["weeks"][0]["basicHours"] == 0
+    assert result["weeks"][0]["basicMinutes"] == 59
+    assert result["weeks"][0]["nightHours"] == 0
+    assert result["weeks"][0]["nightMinutes"] == 59
+    assert result["hourlyRate"] == 0
+    assert result["payePercent"] == 100
+    assert result["niPercent"] == 0
+    assert result["fixedDeductions"] == 0

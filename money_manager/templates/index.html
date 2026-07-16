@@ -358,9 +358,22 @@
       scrollbar-width:none;
     }
     .month-history::-webkit-scrollbar{display:none}
-    .calendar-list,.settings-grid{display:grid;gap:12px}
-    .calendar-item,label{border:1px solid var(--line);border-radius:18px;background:white;padding:14px}
+    .calendar-list,.settings-grid,.wage-grid{display:grid;gap:12px}
+    .calendar-item,label,.wage-card{border:1px solid var(--line);border-radius:18px;background:white;padding:14px}
     label{display:grid;gap:8px;font-weight:800} label small{font-weight:500;color:var(--muted)} textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
+    .wage-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+    .wage-nav button{border:0;border-radius:12px;background:var(--purple-soft);color:var(--purple);padding:10px 13px;font-weight:800}
+    .wage-cycle-title{font-size:17px;font-weight:900;text-align:center}
+    .wage-cycle-sub{margin-top:4px;color:var(--muted);font-size:13px;text-align:center}
+    .wage-settings{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .wage-week-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+    .wage-week-head h3{margin:0;font-size:17px}.wage-week-total{font-weight:900;color:var(--green)}
+    .wage-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+    .wage-field{display:grid;gap:6px;font-weight:800;color:var(--text)}
+    .wage-field span{font-size:12px;color:var(--muted)}
+    .wage-field input{width:100%;min-height:44px;border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit;font-size:16px}
+    .wage-results{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;color:var(--muted);font-size:13px}.wage-results strong{display:block;color:var(--text);font-size:16px;margin-top:3px}
+    .validation-message{color:var(--red);font-size:13px;font-weight:750;margin-top:8px}
     .calendar-item strong{display:block}.calendar-item span{color:var(--muted);font-size:13px}
     .month-pill{
       white-space:nowrap;
@@ -421,6 +434,7 @@
     }
     .summary-item:nth-child(2) .summary-value{color:var(--red)}
     .summary-item:nth-child(3) .summary-value{color:var(--green)}
+    .floating-summary.wage-summary .summary-item:nth-child(2) .summary-value{color:var(--orange)}
 
     .bottom-nav{
       position:fixed;
@@ -429,7 +443,7 @@
       height:72px;
       padding-bottom:env(safe-area-inset-bottom);
       display:grid;
-      grid-template-columns:repeat(4,1fr);
+      grid-template-columns:repeat(5,1fr);
       background:rgba(255,255,255,.97);
       backdrop-filter:blur(18px);
       border-top:1px solid var(--line);
@@ -468,7 +482,8 @@
       .payment-card{grid-template-columns:46px minmax(0,1fr) 86px 30px 22px;gap:9px}
       .payment-card.auto-payment{grid-template-columns:46px minmax(0,1fr) 86px 22px}
       .amount-input{width:86px;font-size:16px}
-      .payment-editor,.add-payment-panel{grid-template-columns:1fr 1fr}
+      .payment-editor,.add-payment-panel,.wage-settings,.wage-fields{grid-template-columns:1fr 1fr}
+      .wage-results{grid-template-columns:1fr}
       .summary-label{font-size:11px}
       .summary-value{font-size:18px}
       .summary-sub{display:none}
@@ -561,6 +576,30 @@
       <div class="month-history" id="monthHistory"></div>
     </section>
 
+    <section class="section app-view" id="wagesView" hidden>
+      <div class="section-head"><h2>Wage Forecast</h2></div>
+      <div class="wage-nav">
+        <button id="prevWageCycle" type="button">‹ Previous</button>
+        <div>
+          <div class="wage-cycle-title" id="wageCycleTitle"></div>
+          <div class="wage-cycle-sub">Four consecutive payroll weeks</div>
+        </div>
+        <button id="nextWageCycle" type="button">Next ›</button>
+      </div>
+      <div class="wage-grid">
+        <div class="wage-card">
+          <div class="wage-settings">
+            <label class="wage-field"><span>Hourly rate</span><input id="wageHourlyRate" type="number" step="0.01" min="0" inputmode="decimal" /></label>
+            <label class="wage-field"><span>PAYE %</span><input id="wagePayePercent" type="number" step="0.01" min="0" max="100" inputmode="decimal" /></label>
+            <label class="wage-field"><span>NI %</span><input id="wageNiPercent" type="number" step="0.01" min="0" max="100" inputmode="decimal" /></label>
+            <label class="wage-field"><span>Fixed deductions</span><input id="wageFixedDeductions" type="number" step="0.01" min="0" inputmode="decimal" /></label>
+          </div>
+          <div class="validation-message" id="wageValidation" hidden></div>
+        </div>
+        <div id="wageWeeks"></div>
+      </div>
+    </section>
+
     <section class="section app-view" id="settingsView" hidden>
       <div class="section-head"><h2>Settings</h2><button class="primary" id="saveSettings">Save</button></div>
       <div class="settings-grid">
@@ -604,6 +643,7 @@
     <button class="active" data-view="overview"><span class="nav-icon">⌂</span><span>Overview</span></button>
     <button data-view="calendar"><span class="nav-icon">▣</span><span>Calendar</span></button>
     <button data-view="history"><span class="nav-icon">↶</span><span>History</span></button>
+    <button data-view="wages"><span class="nav-icon">£</span><span>Wages</span></button>
     <button data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
   </nav>
 
@@ -615,6 +655,9 @@
   const paydayName = value => parseLocalDate(value).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
 
   const parseMoney = value => Number(String(value || '').replace(/[^0-9.-]/g, '')) || 0;
+  const clampNumber = (value, min = 0, max = Infinity) => Math.min(max, Math.max(min, Number(value || 0) || 0));
+  const clampMinutes = value => Math.floor(clampNumber(value, 0, 59));
+  const addDays = (date, days) => { const next = new Date(date); next.setDate(next.getDate() + days); return next; };
   const isAutoDailyPayment = payment => ['food', 'petrol'].includes(String(payment.name || '').trim().toLowerCase());
   const dailyAmountFor = payment => String(payment.name || '').trim().toLowerCase() === 'food' ? Number(state.settings.dailyFoodAmount || 0) : Number(state.settings.dailyPetrolAmount || 0);
   function daysLeftInPayCycle(){
@@ -645,8 +688,9 @@
     });
   }
 
-  let state = {settings:{paydays:[], dailyFoodAmount:15, dailyPetrolAmount:3.71}, recurringPayments:[], months:{}};
+  let state = {settings:{paydays:[], dailyFoodAmount:15, dailyPetrolAmount:3.71}, recurringPayments:[], months:{}, wageForecast:{settings:{hourlyRate:14.48,payePercent:10,niPercent:8,fixedDeductions:15.4},cycles:{}}};
   let currentPayday = null;
+  let currentWagePayday = null;
   let activeFilter = 'all';
   let activeView = 'overview';
 
@@ -706,7 +750,7 @@
       input.oninput = e => { data.balances[id] = parseMoney(e.target.value); apiSave(); updateSummary(); };
       input.onblur = () => input.value = formatMoney(data.balances[id] || 0);
     });
-    renderPayments(); updateSummary(); renderHistory(); renderCalendar(); renderSettings(); setView(activeView);
+    renderPayments(); updateSummary(); renderHistory(); renderCalendar(); renderWages(); renderSettings(); setView(activeView);
   }
 
   function renderPayments(){
@@ -730,6 +774,26 @@
   }
 
   function updateSummary(){
+    const summary = document.querySelector('.floating-summary');
+    summary.classList.toggle('wage-summary', activeView === 'wages');
+    if(activeView === 'wages'){
+      const totals = calculateWageTotals();
+      document.querySelectorAll('.summary-label')[0].textContent = 'Gross Pay';
+      document.querySelectorAll('.summary-label')[1].textContent = 'Deductions';
+      document.querySelectorAll('.summary-label')[2].textContent = 'Estimated Net';
+      document.getElementById('totalAvailable').textContent = formatMoney(totals.gross);
+      document.getElementById('leftToPay').textContent = formatMoney(totals.deductions);
+      document.getElementById('leftover').textContent = formatMoney(totals.net);
+      document.querySelectorAll('.summary-sub')[0].textContent = totals.basicLabel;
+      document.getElementById('remainingPayments').textContent = `${formatMoney(totals.paye)} PAYE · ${formatMoney(totals.ni)} NI`;
+      document.querySelectorAll('.summary-sub')[2].textContent = 'After estimated deductions';
+      return;
+    }
+    document.querySelectorAll('.summary-label')[0].textContent = 'Total Available';
+    document.querySelectorAll('.summary-label')[1].textContent = 'Left To Pay';
+    document.querySelectorAll('.summary-label')[2].textContent = 'Projected Leftover';
+    document.querySelectorAll('.summary-sub')[0].textContent = 'Across 3 accounts';
+    document.querySelectorAll('.summary-sub')[2].textContent = 'After all payments';
     syncAutomaticPayments();
     const data = ensurePayday(); const total = Object.values(data.balances).reduce((a,b)=>a+Number(b||0),0); const unpaid = data.payments.filter(p=>!p.paid); const left = unpaid.reduce((a,p)=>a+calculatedPaymentAmount(p),0);
     document.getElementById('totalAvailable').textContent = formatMoney(total); document.getElementById('leftToPay').textContent = formatMoney(left); document.getElementById('leftover').textContent = formatMoney(total-left); document.getElementById('remainingPayments').textContent = `${unpaid.length} payment${unpaid.length===1?'':'s'}`;
@@ -745,6 +809,76 @@
     sortedPaydays().forEach(day=>{ const data=state.months[day]; const item=document.createElement('div'); item.className='calendar-item'; item.innerHTML=`<strong>${paydayName(day)}</strong><span>${data ? `${data.payments.length} payments tracked` : 'Not started yet'}</span>`; item.onclick=()=>{currentPayday=day; activeView='overview'; render();}; list.appendChild(item); });
   }
 
+  function ensureWageForecast(){
+    state.wageForecast ||= {settings:{}, cycles:{}};
+    state.wageForecast.settings ||= {};
+    state.wageForecast.settings.hourlyRate ??= 14.48;
+    state.wageForecast.settings.payePercent ??= 10;
+    state.wageForecast.settings.niPercent ??= 8;
+    state.wageForecast.settings.fixedDeductions ??= 15.4;
+    state.wageForecast.cycles ||= {};
+    if(!currentWagePayday) currentWagePayday = sortedPaydays()[0] || nearestPayday();
+    if(!state.wageForecast.cycles[currentWagePayday]){
+      state.wageForecast.cycles[currentWagePayday] = {weeks: [0,1,2,3].map(i=>({label:`Week ${i+1}`, basicHours:0, basicMinutes:0, nightHours:0, nightMinutes:0}))};
+    }
+    const cycle = state.wageForecast.cycles[currentWagePayday];
+    cycle.weeks ||= [];
+    while(cycle.weeks.length < 4) cycle.weeks.push({label:`Week ${cycle.weeks.length+1}`, basicHours:0, basicMinutes:0, nightHours:0, nightMinutes:0});
+    cycle.weeks = cycle.weeks.slice(0,4);
+    return cycle;
+  }
+
+  function minutesLabel(totalMinutes){
+    const hours = Math.floor(totalMinutes / 60); const minutes = totalMinutes % 60;
+    return `${hours} Hours and ${minutes} Minutes`;
+  }
+
+  function calculateWageTotals(){
+    const cycle = ensureWageForecast(); const settings = state.wageForecast.settings;
+    const hourlyRate = clampNumber(settings.hourlyRate, 0); const payePercent = clampNumber(settings.payePercent, 0, 100); const niPercent = clampNumber(settings.niPercent, 0, 100); const fixedDeductions = clampNumber(settings.fixedDeductions, 0);
+    let gross = 0, basicMinutesTotal = 0, nightMinutesTotal = 0;
+    const weeks = cycle.weeks.map((week, index)=>{
+      week.label ||= `Week ${index + 1}`;
+      week.basicHours = clampNumber(week.basicHours, 0); week.basicMinutes = clampMinutes(week.basicMinutes); week.nightHours = clampNumber(week.nightHours, 0); week.nightMinutes = clampMinutes(week.nightMinutes);
+      const basicMinutes = Math.round(week.basicHours * 60 + week.basicMinutes); const nightMinutes = Math.round(week.nightHours * 60 + week.nightMinutes);
+      const basicPay = basicMinutes / 60 * hourlyRate; const nightPremium = nightMinutes / 60 * hourlyRate / 3; const weekGross = basicPay + nightPremium;
+      gross += weekGross; basicMinutesTotal += basicMinutes; nightMinutesTotal += nightMinutes;
+      return {...week, basicPay, nightPremium, gross: weekGross};
+    });
+    const paye = gross * payePercent / 100; const ni = gross * niPercent / 100; const deductions = paye + ni + fixedDeductions;
+    return {weeks, gross, paye, ni, deductions, net:gross-deductions, basicLabel:minutesLabel(basicMinutesTotal), nightLabel:minutesLabel(nightMinutesTotal)};
+  }
+
+  function validateWages(){
+    const messages = [];
+    if(!sortedPaydays().length) messages.push('Add at least one payday in Settings before forecasting wages.');
+    const settings = state.wageForecast?.settings || {};
+    if(Number(settings.hourlyRate || 0) < 0) messages.push('Hourly rate cannot be negative.');
+    if(Number(settings.fixedDeductions || 0) < 0) messages.push('Fixed deductions cannot be negative.');
+    ['payePercent','niPercent'].forEach(key=>{ if(Number(settings[key] || 0) < 0 || Number(settings[key] || 0) > 100) messages.push('Percentages must be between 0 and 100.'); });
+    ensureWageForecast().weeks.forEach((week, index)=>{
+      ['basicMinutes','nightMinutes'].forEach(key=>{ if(Number(week[key] || 0) < 0 || Number(week[key] || 0) > 59) messages.push(`Week ${index + 1} minutes must be between 0 and 59.`); });
+      ['basicHours','nightHours'].forEach(key=>{ if(Number(week[key] || 0) < 0) messages.push(`Week ${index + 1} hours cannot be negative.`); });
+    });
+    wageValidation.hidden = !messages.length; wageValidation.textContent = [...new Set(messages)].join(' ');
+  }
+
+  function renderWages(){
+    const cycle = ensureWageForecast(); const settings = state.wageForecast.settings; const payday = parseLocalDate(currentWagePayday); const start = addDays(payday, -27);
+    wageCycleTitle.textContent = `${paydayName(currentWagePayday)} payday`;
+    wageCycleTitle.nextElementSibling.textContent = `${start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${payday.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
+    wageHourlyRate.value = Number(settings.hourlyRate || 0).toFixed(2); wagePayePercent.value = Number(settings.payePercent || 0); wageNiPercent.value = Number(settings.niPercent || 0); wageFixedDeductions.value = Number(settings.fixedDeductions || 0).toFixed(2);
+    const totals = calculateWageTotals(); wageWeeks.innerHTML = '';
+    totals.weeks.forEach((week, index)=>{
+      const weekStart = addDays(start, index * 7); const weekEnd = addDays(weekStart, 6);
+      const card = document.createElement('article'); card.className = 'wage-card';
+      card.innerHTML = `<div class="wage-week-head"><div><h3>Week ${index + 1}</h3><div class="wage-cycle-sub">${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div></div><div class="wage-week-total">${formatMoney(week.gross)}</div></div><div class="wage-fields"><label class="wage-field"><span>Basic hours</span><input data-index="${index}" data-key="basicHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.basicHours}"></label><label class="wage-field"><span>Basic minutes</span><input data-index="${index}" data-key="basicMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.basicMinutes}"></label><label class="wage-field"><span>Night premium hours</span><input data-index="${index}" data-key="nightHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.nightHours}"></label><label class="wage-field"><span>Night premium minutes</span><input data-index="${index}" data-key="nightMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.nightMinutes}"></label></div><div class="wage-results"><div>Basic pay<strong>${formatMoney(week.basicPay)}</strong></div><div>Night premium<strong>${formatMoney(week.nightPremium)}</strong></div><div>Week gross<strong>${formatMoney(week.gross)}</strong></div></div>`;
+      card.querySelectorAll('input').forEach(input=>input.onchange=e=>{ const i=Number(e.target.dataset.index); const key=e.target.dataset.key; cycle.weeks[i][key] = key.includes('Minutes') ? clampMinutes(e.target.value) : clampNumber(e.target.value, 0); apiSave(); renderWages(); updateSummary(); });
+      wageWeeks.appendChild(card);
+    });
+    validateWages(); if(activeView === 'wages') updateSummary();
+  }
+
   function renderSettings(){
     paydaysInput.value = sortedPaydays().join('\n'); dailyFoodAmount.value = Number(state.settings.dailyFoodAmount || 0).toFixed(2); dailyPetrolAmount.value = Number(state.settings.dailyPetrolAmount || 0).toFixed(2); recurringList.innerHTML='';
     state.recurringPayments.forEach(payment=>{ const row=document.createElement('article'); row.className='payment-card'; row.innerHTML=`<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · Recurring every payday period</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}"><button class="check ${payment.active!==false?'on':''}">${payment.active!==false?'✓':''}</button><button class="danger">×</button>`; row.querySelector('.amount-input').onchange=e=>{payment.amount=parseMoney(e.target.value); e.target.value=formatMoney(payment.amount); apiSave();}; row.querySelector('.check').onclick=()=>{payment.active=payment.active===false; apiSave(); renderSettings();}; row.querySelector('.danger').onclick=()=>{state.recurringPayments=state.recurringPayments.filter(p=>p.id!==payment.id); apiSave(); renderSettings();}; recurringList.appendChild(row); });
@@ -754,8 +888,9 @@
     activeView=view; document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
     document.querySelectorAll('.app-view').forEach(v=>v.hidden=true);
     document.querySelectorAll('.overview-view').forEach(v=>v.hidden = view !== 'overview');
-    document.querySelector('.floating-summary').hidden = view !== 'overview';
-    ['calendar','history','settings'].forEach(v=>{ const el=document.getElementById(`${v}View`); if(el) el.hidden = view !== v; });
+    document.querySelector('.floating-summary').hidden = !['overview','wages'].includes(view);
+    ['calendar','history','wages','settings'].forEach(v=>{ const el=document.getElementById(`${v}View`); if(el) el.hidden = view !== v; });
+    updateSummary();
   }
 
   prevMonth.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.max(0,i-1)] || currentPayday; render(); };
@@ -765,10 +900,13 @@
   addPayment.onclick = ()=>{ const data=ensurePayday(); const name=newName.value.trim(); if(!name) return; data.payments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(newAmount.value||0), day:Math.max(1,Math.min(31,Number(newDay.value||1))), paid:false}); newName.value=newAmount.value=newDay.value=''; addPanel.classList.remove('open'); apiSave(); render(); };
   addRecurring.onclick = ()=>{ const name=recName.value.trim(); if(!name) return; state.recurringPayments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(recAmount.value||0), day:Math.max(1,Math.min(31,Number(recDay.value||1))), active:true}); recName.value=recAmount.value=recDay.value=''; apiSave(); renderSettings(); };
   saveSettings.onclick = ()=>{ state.settings.paydays = paydaysInput.value.split(/\s+/).filter(Boolean).sort(); state.settings.dailyFoodAmount = parseMoney(dailyFoodAmount.value); state.settings.dailyPetrolAmount = parseMoney(dailyPetrolAmount.value); currentPayday = nearestPayday(); syncAutomaticPayments(); apiSave(); render(); };
+  prevWageCycle.onclick = ()=>{ ensureWageForecast(); currentWagePayday = dateKey(addDays(parseLocalDate(currentWagePayday), -28)); renderWages(); updateSummary(); };
+  nextWageCycle.onclick = ()=>{ ensureWageForecast(); currentWagePayday = dateKey(addDays(parseLocalDate(currentWagePayday), 28)); renderWages(); updateSummary(); };
+  [wageHourlyRate,wagePayePercent,wageNiPercent,wageFixedDeductions].forEach(input=>input.onchange=e=>{ const map={wageHourlyRate:'hourlyRate',wagePayePercent:'payePercent',wageNiPercent:'niPercent',wageFixedDeductions:'fixedDeductions'}; const key=map[e.target.id]; state.wageForecast.settings[key] = key.includes('Percent') ? clampNumber(e.target.value,0,100) : clampNumber(e.target.value,0); apiSave(); renderWages(); updateSummary(); });
   openSettings.onclick = ()=>{ setView('settings'); };
   document.querySelectorAll('.bottom-nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 
-  fetch('api/budget').then(r=>r.json()).then(data=>{ state=data; state.settings ||= {}; state.settings.dailyFoodAmount ??= 15; state.settings.dailyPetrolAmount ??= 3.71; currentPayday=nearestPayday(); render(); });
+  fetch('api/budget').then(r=>r.json()).then(data=>{ state=data; state.settings ||= {}; state.settings.dailyFoodAmount ??= 15; state.settings.dailyPetrolAmount ??= 3.71; state.wageForecast ||= {settings:{}, cycles:{}}; state.wageForecast.settings ||= {}; state.wageForecast.cycles ||= {}; currentPayday=nearestPayday(); currentWagePayday=sortedPaydays()[0] || currentPayday; render(); });
 </script>
 </body>
 </html>
