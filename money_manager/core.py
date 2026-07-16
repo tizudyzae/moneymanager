@@ -199,7 +199,7 @@ def normalise_wage_week(week: dict[str, Any] | None, index: int = 0) -> dict[str
     week = week or {}
     return {
         "label": week.get("label") or f"Week {index + 1}",
-        "basicHours": clamp_number(week.get("basicHours", week.get("basic_hours", 0))),
+        "basicHours": clamp_number(week.get("basicHours", week.get("basic_hours", 39))),
         "basicMinutes": clamp_minutes(week.get("basicMinutes", week.get("basic_minutes", 0))),
         "nightHours": clamp_number(week.get("nightHours", week.get("third_hours", 0))),
         "nightMinutes": clamp_minutes(week.get("nightMinutes", week.get("third_minutes", 0))),

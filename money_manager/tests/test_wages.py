@@ -69,3 +69,11 @@ def test_wage_forecast_clamps_invalid_values():
     assert result["payePercent"] == 100
     assert result["niPercent"] == 0
     assert result["fixedDeductions"] == 0
+
+
+def test_empty_wage_weeks_default_to_39_basic_hours():
+    weeks = money_core.empty_wage_weeks()
+
+    assert len(weeks) == 4
+    assert all(week["basicHours"] == 39 for week in weeks)
+    assert all(week["basicMinutes"] == 0 for week in weeks)
