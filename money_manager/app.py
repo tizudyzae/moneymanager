@@ -2,14 +2,21 @@ import os
 import sqlite3
 from pathlib import Path
 
+import hashlib
 import json
+import mimetypes
 import uuid
 from datetime import date
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
-from flask import Flask, g, jsonify, render_template, request
+from flask import Flask, abort, g, jsonify, render_template, request, send_file
 from core import default_sheets, wage_forecast_defaults
 
 DB_PATH = Path(os.environ.get("MONEY_MANAGER_DB", "/config/money_manager.db"))
+ICON_CACHE_DIR = Path(os.environ.get("MONEY_MANAGER_ICON_CACHE", "/config/icon_cache"))
+ICON_FETCH_TIMEOUT = 10
 VERSION_PATH = Path(__file__).resolve().parent / "VERSION"
 NEXT_PAYDAY = "2026-07-23"
 
@@ -107,6 +114,46 @@ def load_sheets():
                 cell["value"] = saved[(sheet["slug"], key)]
     return sheets
 
+
+def cached_icon_path(icon_url):
+    parsed = urlparse(icon_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        abort(400, description="Only HTTP and HTTPS icon URLs can be cached")
+
+    extension = Path(parsed.path).suffix.lower()
+    if extension not in {".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".svg", ".webp"}:
+        extension = ""
+
+    cache_key = hashlib.sha256(icon_url.encode("utf-8")).hexdigest()
+    matches = list(ICON_CACHE_DIR.glob(f"{cache_key}.*"))
+    if matches:
+        return matches[0]
+
+    ICON_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    request_headers = {"User-Agent": f"MoneyManager/{app_version()}"}
+    icon_request = Request(icon_url, headers=request_headers)
+    try:
+        with urlopen(icon_request, timeout=ICON_FETCH_TIMEOUT) as response:
+            content_type = response.headers.get_content_type()
+            if not content_type.startswith("image/"):
+                abort(415, description="Icon URL did not return an image")
+            extension = extension or mimetypes.guess_extension(content_type) or ".img"
+            cache_path = ICON_CACHE_DIR / f"{cache_key}{extension}"
+            cache_path.write_bytes(response.read())
+            return cache_path
+    except HTTPError as error:
+        abort(error.code, description="Could not fetch icon URL")
+    except URLError:
+        abort(502, description="Could not fetch icon URL")
+
+
+@app.get("/api/icon")
+def get_cached_icon():
+    icon_url = request.args.get("url", "").strip()
+    if not icon_url:
+        abort(400, description="Missing icon URL")
+    cache_path = cached_icon_path(icon_url)
+    return send_file(cache_path, max_age=31536000, conditional=True)
 
 @app.get("/")
 def index():
