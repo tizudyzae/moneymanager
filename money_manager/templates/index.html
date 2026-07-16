@@ -516,7 +516,7 @@
           <div>
             <div class="account-name">First Direct</div>
             <input class="balance-input" id="firstDirect" type="text" inputmode="decimal" />
-            <div class="available">Available</div>
+            <div class="available" id="firstDirectStatus">Available</div>
           </div>
         </article>
 
@@ -718,14 +718,45 @@
     return currentPaydayPeriod();
   }
 
+  function paymentFromRecurring(payment){
+    return {...payment, id:crypto.randomUUID?.() || String(Math.random()), recurringId:payment.id, paid:false};
+  }
+
+  function syncRecurringPaymentsForPayday(paydayKey){
+    const month = state.months[paydayKey];
+    if(!month) return;
+    month.payments ||= [];
+    const isFutureMonth = paydayKey > currentPaydayPeriod();
+    const activeRecurring = state.recurringPayments.filter(payment => payment.active !== false);
+    activeRecurring.forEach(recurring => {
+      const existing = month.payments.find(payment => payment.recurringId === recurring.id);
+      if(existing){
+        existing.name = recurring.name;
+        existing.day = recurring.day;
+        if(isFutureMonth || !existing.paid) existing.amount = Number(recurring.amount || 0);
+      }else if(isFutureMonth){
+        month.payments.push(paymentFromRecurring(recurring));
+      }
+    });
+    if(isFutureMonth){
+      const activeIds = new Set(activeRecurring.map(payment => payment.id));
+      month.payments = month.payments.filter(payment => !payment.recurringId || activeIds.has(payment.recurringId));
+    }
+  }
+
+  function syncFutureRecurringPayments(){
+    Object.keys(state.months).forEach(syncRecurringPaymentsForPayday);
+  }
+
   function ensurePayday(){
     if(!currentPayday) currentPayday = nearestPayday();
     if(!state.months[currentPayday]){
       state.months[currentPayday] = {
         balances:{firstDirect:0,lloyds:0,barclays:0},
-        payments: state.recurringPayments.filter(p=>p.active !== false).map(p=>({...p,id:crypto.randomUUID?.() || String(Math.random()), recurringId:p.id, paid:false}))
+        payments: state.recurringPayments.filter(p=>p.active !== false).map(paymentFromRecurring)
       };
     }
+    syncRecurringPaymentsForPayday(currentPayday);
     return state.months[currentPayday];
   }
 
@@ -744,13 +775,18 @@
     const data = ensurePayday();
     document.getElementById('monthLabel').textContent = paydayName(currentPayday);
     document.getElementById('activePaydayLabel').textContent = paydayName(currentPayday);
+    const futurePayday = isFuturePaydayPeriod();
     ['firstDirect','lloyds','barclays'].forEach(id=>{
       const input = document.getElementById(id);
-      input.value = formatMoney(data.balances[id] || 0);
+      const estimatedFirstDirect = id === 'firstDirect' && futurePayday;
+      const displayValue = estimatedFirstDirect ? calculateWageTotals(currentPayday).net : (data.balances[id] || 0);
+      input.value = formatMoney(displayValue);
+      input.readOnly = estimatedFirstDirect;
       input.onfocus = () => input.select();
-      input.oninput = e => { data.balances[id] = parseMoney(e.target.value); apiSave(); updateSummary(); };
-      input.onblur = () => input.value = formatMoney(data.balances[id] || 0);
+      input.oninput = e => { if(estimatedFirstDirect) return; data.balances[id] = parseMoney(e.target.value); apiSave(); updateSummary(); };
+      input.onblur = () => input.value = formatMoney(estimatedFirstDirect ? calculateWageTotals(currentPayday).net : (data.balances[id] || 0));
     });
+    firstDirectStatus.textContent = futurePayday ? 'Estimated' : 'Available';
     renderPayments(); updateSummary(); renderHistory(); renderCalendar(); renderWages(); renderSettings(); setView(activeView);
   }
 
@@ -890,7 +926,7 @@
 
   function renderSettings(){
     paydaysInput.value = sortedPaydays().join('\n'); dailyFoodAmount.value = Number(state.settings.dailyFoodAmount || 0).toFixed(2); dailyPetrolAmount.value = Number(state.settings.dailyPetrolAmount || 0).toFixed(2); recurringList.innerHTML='';
-    state.recurringPayments.forEach(payment=>{ const row=document.createElement('article'); row.className='payment-card'; row.innerHTML=`<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · Recurring every payday period</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}"><button class="check ${payment.active!==false?'on':''}">${payment.active!==false?'✓':''}</button><button class="danger">×</button>`; row.querySelector('.amount-input').onchange=e=>{payment.amount=parseMoney(e.target.value); e.target.value=formatMoney(payment.amount); apiSave();}; row.querySelector('.check').onclick=()=>{payment.active=payment.active===false; apiSave(); renderSettings();}; row.querySelector('.danger').onclick=()=>{state.recurringPayments=state.recurringPayments.filter(p=>p.id!==payment.id); apiSave(); renderSettings();}; recurringList.appendChild(row); });
+    state.recurringPayments.forEach(payment=>{ const row=document.createElement('article'); row.className='payment-card'; row.innerHTML=`<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · Recurring every payday period</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}"><button class="check ${payment.active!==false?'on':''}">${payment.active!==false?'✓':''}</button><button class="danger">×</button>`; row.querySelector('.amount-input').onchange=e=>{payment.amount=parseMoney(e.target.value); e.target.value=formatMoney(payment.amount); syncFutureRecurringPayments(); apiSave(); render();}; row.querySelector('.check').onclick=()=>{payment.active=payment.active===false; syncFutureRecurringPayments(); apiSave(); render();}; row.querySelector('.danger').onclick=()=>{state.recurringPayments=state.recurringPayments.filter(p=>p.id!==payment.id); syncFutureRecurringPayments(); apiSave(); render();}; recurringList.appendChild(row); });
   }
 
   function setView(view){
@@ -907,8 +943,8 @@
   document.querySelectorAll('.filter-tabs button').forEach(button=>{ button.onclick=()=>{ activeFilter=button.dataset.filter; document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active')); button.classList.add('active'); renderPayments(); }; });
   topAddPayment.onclick = ()=>{ addPanel.classList.toggle('open'); if(addPanel.classList.contains('open')) newName.focus(); };
   addPayment.onclick = ()=>{ const data=ensurePayday(); const name=newName.value.trim(); if(!name) return; data.payments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(newAmount.value||0), day:Math.max(1,Math.min(31,Number(newDay.value||1))), paid:false}); newName.value=newAmount.value=newDay.value=''; addPanel.classList.remove('open'); apiSave(); render(); };
-  addRecurring.onclick = ()=>{ const name=recName.value.trim(); if(!name) return; state.recurringPayments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(recAmount.value||0), day:Math.max(1,Math.min(31,Number(recDay.value||1))), active:true}); recName.value=recAmount.value=recDay.value=''; apiSave(); renderSettings(); };
-  saveSettings.onclick = ()=>{ state.settings.paydays = paydaysInput.value.split(/\s+/).filter(Boolean).sort(); state.settings.dailyFoodAmount = parseMoney(dailyFoodAmount.value); state.settings.dailyPetrolAmount = parseMoney(dailyPetrolAmount.value); currentPayday = nearestPayday(); currentWagePayday = currentPayday; syncAutomaticPayments(); apiSave(); render(); };
+  addRecurring.onclick = ()=>{ const name=recName.value.trim(); if(!name) return; state.recurringPayments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(recAmount.value||0), day:Math.max(1,Math.min(31,Number(recDay.value||1))), active:true}); recName.value=recAmount.value=recDay.value=''; syncFutureRecurringPayments(); apiSave(); render(); };
+  saveSettings.onclick = ()=>{ state.settings.paydays = paydaysInput.value.split(/\s+/).filter(Boolean).sort(); state.settings.dailyFoodAmount = parseMoney(dailyFoodAmount.value); state.settings.dailyPetrolAmount = parseMoney(dailyPetrolAmount.value); currentPayday = nearestPayday(); currentWagePayday = currentPayday; syncFutureRecurringPayments(); syncAutomaticPayments(); apiSave(); render(); };
   prevWageCycle.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.max(0,i-1)] || currentPayday; currentWagePayday=currentPayday; render(); };
   nextWageCycle.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.min(p.length-1,i+1)] || currentPayday; currentWagePayday=currentPayday; render(); };
   [wageHourlyRate,wagePayePercent,wageNiPercent,wageFixedDeductions].forEach(input=>input.onchange=e=>{ const map={wageHourlyRate:'hourlyRate',wagePayePercent:'payePercent',wageNiPercent:'niPercent',wageFixedDeductions:'fixedDeductions'}; const key=map[e.target.id]; state.wageForecast.settings[key] = key.includes('Percent') ? clampNumber(e.target.value,0,100) : clampNumber(e.target.value,0); apiSave(); renderWages(); updateSummary(); });
