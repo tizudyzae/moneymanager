@@ -169,6 +169,94 @@ def build_sheet(accounts, bills, months=MONTH_COLUMNS):
     return {"months": months, "account_rows": accounts, "bill_rows": bill_rows, "totals_left": totals_left, "pre_paid": pre_paid}
 
 
+
+def clamp_number(value: Any, minimum: float = 0.0, maximum: float | None = None) -> float:
+    number = parse_number(value)
+    if number < minimum:
+        return minimum
+    if maximum is not None and number > maximum:
+        return maximum
+    return number
+
+
+def clamp_minutes(value: Any) -> int:
+    return int(clamp_number(value, 0, 59))
+
+
+def wage_forecast_defaults() -> dict[str, Any]:
+    return {
+        "settings": {
+            "hourlyRate": 14.48,
+            "payePercent": 10,
+            "niPercent": 8,
+            "fixedDeductions": 15.4,
+        },
+        "cycles": {},
+    }
+
+
+def normalise_wage_week(week: dict[str, Any] | None, index: int = 0) -> dict[str, Any]:
+    week = week or {}
+    return {
+        "label": week.get("label") or f"Week {index + 1}",
+        "basicHours": clamp_number(week.get("basicHours", week.get("basic_hours", 0))),
+        "basicMinutes": clamp_minutes(week.get("basicMinutes", week.get("basic_minutes", 0))),
+        "nightHours": clamp_number(week.get("nightHours", week.get("third_hours", 0))),
+        "nightMinutes": clamp_minutes(week.get("nightMinutes", week.get("third_minutes", 0))),
+    }
+
+
+def empty_wage_weeks() -> list[dict[str, Any]]:
+    return [normalise_wage_week(None, index) for index in range(4)]
+
+
+def calculate_wage_forecast(weeks: list[dict[str, Any]], settings: dict[str, Any]) -> dict[str, Any]:
+    normalised_weeks = [normalise_wage_week(weeks[index] if index < len(weeks) else None, index) for index in range(4)]
+    hourly_rate = clamp_number(settings.get("hourlyRate", settings.get("hourly_rate", 0)))
+    paye_percent = clamp_number(settings.get("payePercent", settings.get("paye_percent", 0)), 0, 100)
+    ni_percent = clamp_number(settings.get("niPercent", settings.get("ni_percent", 0)), 0, 100)
+    fixed_deductions = clamp_number(settings.get("fixedDeductions", settings.get("fixed_deductions", 0)))
+
+    rows = []
+    gross = 0.0
+    total_basic_minutes = 0
+    total_night_minutes = 0
+    for week in normalised_weeks:
+        basic_minutes = int(week["basicHours"] * 60 + week["basicMinutes"])
+        night_minutes = int(week["nightHours"] * 60 + week["nightMinutes"])
+        basic_hours = basic_minutes / 60
+        premium_hours = night_minutes / 60
+        basic_pay = basic_hours * hourly_rate
+        night_premium = premium_hours * hourly_rate / 3
+        week_gross = basic_pay + night_premium
+        gross += week_gross
+        total_basic_minutes += basic_minutes
+        total_night_minutes += night_minutes
+        rows.append({
+            **week,
+            "basicPay": basic_pay,
+            "nightPremium": night_premium,
+            "gross": week_gross,
+        })
+
+    paye = gross * (paye_percent / 100)
+    ni = gross * (ni_percent / 100)
+    deductions = paye + ni + fixed_deductions
+    return {
+        "weeks": rows,
+        "hourlyRate": hourly_rate,
+        "payePercent": paye_percent,
+        "niPercent": ni_percent,
+        "fixedDeductions": fixed_deductions,
+        "gross": gross,
+        "paye": paye,
+        "ni": ni,
+        "deductions": deductions,
+        "net": gross - deductions,
+        "totalBasicTime": minutes_to_label(total_basic_minutes),
+        "totalNightPremiumTime": minutes_to_label(total_night_minutes),
+    }
+
 def minutes_to_label(total_minutes):
     hours, minutes = divmod(int(total_minutes), 60)
     return f"{hours} Hours and {minutes} Minutes"

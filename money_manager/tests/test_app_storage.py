@@ -42,3 +42,26 @@ def test_budget_defaults_and_migrates_to_july_2026_payday(tmp_path):
 
         saved = client.get("/api/budget").get_json()
         assert saved["settings"]["paydays"] == ["2026-07-01", "2026-07-23"]
+
+
+def test_budget_api_persists_wage_forecast_data(tmp_path):
+    money_app.DB_PATH = tmp_path / "money_manager.db"
+
+    with money_app.app.test_client() as client:
+        data = client.get("/api/budget").get_json()
+        data["wageForecast"]["settings"]["hourlyRate"] = 15.25
+        data["wageForecast"]["cycles"]["2026-08-20"] = {
+            "weeks": [
+                {"basicHours": 40, "basicMinutes": 0, "nightHours": 5, "nightMinutes": 30},
+                {"basicHours": 39, "basicMinutes": 15, "nightHours": 2, "nightMinutes": 0},
+                {"basicHours": 38, "basicMinutes": 45, "nightHours": 0, "nightMinutes": 30},
+                {"basicHours": 40, "basicMinutes": 0, "nightHours": 1, "nightMinutes": 0},
+            ]
+        }
+
+        response = client.put("/api/budget", json=data)
+
+        assert response.status_code == 200
+        saved = client.get("/api/budget").get_json()
+        assert saved["wageForecast"]["settings"]["hourlyRate"] == 15.25
+        assert saved["wageForecast"]["cycles"]["2026-08-20"]["weeks"][0]["nightMinutes"] == 30

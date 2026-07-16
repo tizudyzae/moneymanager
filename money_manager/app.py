@@ -7,7 +7,7 @@ import uuid
 from datetime import date
 
 from flask import Flask, g, jsonify, render_template, request
-from core import default_sheets
+from core import default_sheets, wage_forecast_defaults
 
 DB_PATH = Path(os.environ.get("MONEY_MANAGER_DB", "/config/money_manager.db"))
 VERSION_PATH = Path(__file__).resolve().parent / "VERSION"
@@ -46,6 +46,7 @@ def default_budget_data():
             for name, amount, day in DEFAULT_PAYMENTS
         ],
         "months": {},
+        "wageForecast": wage_forecast_defaults(),
     }
 
 
@@ -122,6 +123,12 @@ def load_budget_data():
     settings.setdefault("dailyPetrolAmount", 3.71)
     data.setdefault("recurringPayments", [])
     data.setdefault("months", {})
+    wage_defaults = wage_forecast_defaults()
+    wage_forecast = data.setdefault("wageForecast", wage_defaults)
+    wage_settings = wage_forecast.setdefault("settings", {})
+    for key, value in wage_defaults["settings"].items():
+        wage_settings.setdefault(key, value)
+    wage_forecast.setdefault("cycles", {})
     return data
 
 
