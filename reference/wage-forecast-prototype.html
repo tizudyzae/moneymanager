@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7f9fc" />
+  <title>Wage Forecast Prototype</title>
+  <style>
+    :root{
+      --bg:#f6f8fc;
+      --card:#ffffff;
+      --text:#172033;
+      --muted:#748096;
+      --line:#e2e7ef;
+      --purple:#5c5cf4;
+      --purple-soft:#efefff;
+      --green:#119969;
+      --green-soft:#e9f8f2;
+      --orange:#f28a32;
+      --red:#df4e4e;
+      --shadow:0 16px 40px rgba(25,39,75,.10);
+      --radius:22px;
+    }
+
+    *{box-sizing:border-box}
+
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:var(--bg);
+      color:var(--text);
+      padding-bottom:210px;
+    }
+
+    button,input{font:inherit}
+    button{cursor:pointer}
+
+    .shell{
+      width:min(100%,920px);
+      margin:0 auto;
+      padding:18px 18px 48px;
+    }
+
+    .header{
+      position:sticky;
+      top:0;
+      z-index:20;
+      display:grid;
+      grid-template-columns:44px 1fr 44px;
+      align-items:center;
+      gap:10px;
+      padding:calc(10px + env(safe-area-inset-top)) 0 14px;
+      background:rgba(246,248,252,.92);
+      backdrop-filter:blur(18px);
+    }
+
+    .icon-btn{
+      width:44px;height:44px;border:0;border-radius:14px;
+      background:transparent;color:var(--text);
+      font-size:25px;display:grid;place-items:center;
+    }
+
+    .cycle-nav{
+      display:flex;align-items:center;justify-content:center;gap:10px;
+    }
+
+    .cycle-nav button{
+      border:0;background:transparent;font-size:28px;color:var(--text);
+    }
+
+    .cycle-title{
+      min-width:180px;
+      text-align:center;
+      font-size:23px;
+      font-weight:850;
+      letter-spacing:-.03em;
+    }
+
+    .settings-btn{
+      background:var(--purple);
+      color:white;
+      box-shadow:0 10px 22px rgba(92,92,244,.26);
+      font-size:20px;
+    }
+
+    .intro{
+      margin-top:14px;
+      background:linear-gradient(135deg,#1c2c54,#4d4ed8);
+      color:white;
+      border-radius:26px;
+      padding:22px;
+      box-shadow:var(--shadow);
+    }
+
+    .intro .eyebrow{
+      font-size:13px;
+      opacity:.76;
+    }
+
+    .intro h1{
+      margin:6px 0 4px;
+      font-size:28px;
+      letter-spacing:-.04em;
+    }
+
+    .intro p{
+      margin:0;
+      color:#e3e6ff;
+      font-size:14px;
+    }
+
+    .intro-grid{
+      margin-top:18px;
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:10px;
+    }
+
+    .intro-stat{
+      background:rgba(255,255,255,.12);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:16px;
+      padding:13px;
+    }
+
+    .intro-stat span{
+      display:block;
+      font-size:12px;
+      color:#d5dafc;
+    }
+
+    .intro-stat strong{
+      display:block;
+      margin-top:5px;
+      font-size:18px;
+    }
+
+    .section{
+      margin-top:24px;
+    }
+
+    .section-head{
+      display:flex;justify-content:space-between;align-items:center;gap:12px;
+      margin-bottom:14px;
+    }
+
+    .section-head h2{
+      margin:0;font-size:20px;letter-spacing:-.02em;
+    }
+
+    .section-head span{
+      color:var(--muted);font-size:13px;
+    }
+
+    .weeks{
+      display:grid;
+      gap:14px;
+    }
+
+    .week-card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:22px;
+      padding:18px;
+      box-shadow:0 8px 24px rgba(28,41,72,.045);
+    }
+
+    .week-top{
+      display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+      margin-bottom:16px;
+    }
+
+    .week-badge{
+      width:48px;height:48px;border-radius:15px;
+      display:grid;place-items:center;
+      background:var(--purple-soft);color:var(--purple);
+      font-weight:850;
+    }
+
+    .week-copy{
+      flex:1;
+    }
+
+    .week-copy h3{
+      margin:0;font-size:18px;
+    }
+
+    .week-copy p{
+      margin:4px 0 0;color:var(--muted);font-size:13px;
+    }
+
+    .week-total{
+      text-align:right;
+    }
+
+    .week-total span{
+      display:block;font-size:12px;color:var(--muted);
+    }
+
+    .week-total strong{
+      display:block;margin-top:4px;font-size:20px;
+    }
+
+    .time-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+
+    .time-block{
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:14px;
+      background:#fbfcff;
+    }
+
+    .time-block label{
+      display:block;
+      color:var(--muted);
+      font-size:13px;
+      margin-bottom:10px;
+    }
+
+    .time-inputs{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+    }
+
+    .field{
+      position:relative;
+    }
+
+    .field input{
+      width:100%;
+      border:1px solid var(--line);
+      background:white;
+      border-radius:12px;
+      padding:12px 34px 12px 12px;
+      font-size:17px;
+      font-weight:750;
+      color:var(--text);
+      outline:none;
+    }
+
+    .field span{
+      position:absolute;
+      right:10px;
+      top:50%;
+      transform:translateY(-50%);
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .premium-note{
+      margin-top:12px;
+      padding:11px 12px;
+      border-radius:13px;
+      background:var(--green-soft);
+      color:#0e7953;
+      font-size:13px;
+    }
+
+    .breakdown{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns:repeat(3,1fr);
+      gap:8px;
+    }
+
+    .mini-stat{
+      border-top:1px solid var(--line);
+      padding-top:12px;
+    }
+
+    .mini-stat span{
+      display:block;color:var(--muted);font-size:12px;
+    }
+
+    .mini-stat strong{
+      display:block;margin-top:4px;font-size:16px;
+    }
+
+    .settings-panel{
+      display:none;
+      margin-top:14px;
+      background:white;
+      border:1px solid var(--line);
+      border-radius:22px;
+      padding:18px;
+      box-shadow:var(--shadow);
+    }
+
+    .settings-panel.open{display:block}
+
+    .settings-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:12px;
+    }
+
+    .setting label{
+      display:block;
+      color:var(--muted);
+      font-size:13px;
+      margin-bottom:7px;
+    }
+
+    .setting input{
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:11px 12px;
+      font-weight:700;
+      background:white;
+    }
+
+    .deductions{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:12px;
+      margin-top:12px;
+    }
+
+    .history{
+      display:flex;
+      gap:8px;
+      overflow-x:auto;
+      scrollbar-width:none;
+      padding-bottom:4px;
+    }
+
+    .history::-webkit-scrollbar{display:none}
+
+    .cycle-pill{
+      white-space:nowrap;
+      border:1px solid var(--line);
+      background:white;
+      border-radius:999px;
+      padding:8px 12px;
+      color:var(--muted);
+    }
+
+    .cycle-pill.active{
+      background:var(--purple);
+      color:white;
+      border-color:var(--purple);
+    }
+
+    .floating-summary{
+      position:fixed;
+      left:50%;
+      bottom:20px;
+      transform:translateX(-50%);
+      width:min(calc(100% - 24px),890px);
+      z-index:40;
+      background:rgba(255,255,255,.97);
+      backdrop-filter:blur(20px);
+      border:1px solid rgba(224,229,239,.96);
+      border-radius:26px;
+      box-shadow:0 18px 44px rgba(25,39,75,.20);
+      padding:18px 16px 16px;
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:8px;
+    }
+
+    .grab{
+      position:absolute;
+      top:7px;left:50%;transform:translateX(-50%);
+      width:48px;height:5px;border-radius:999px;background:#d9dee8;
+    }
+
+    .summary-item{
+      text-align:center;
+      padding:12px 8px 4px;
+      min-width:0;
+    }
+
+    .summary-item + .summary-item{
+      border-left:1px solid var(--line);
+    }
+
+    .summary-label{
+      color:var(--muted);
+      font-size:12px;
+    }
+
+    .summary-value{
+      margin-top:6px;
+      font-size:21px;
+      font-weight:900;
+      letter-spacing:-.04em;
+      white-space:nowrap;
+    }
+
+    .summary-item.net .summary-value{color:var(--green)}
+    .summary-item.deduct .summary-value{color:var(--red)}
+
+    @media(max-width:620px){
+      body{padding-bottom:240px}
+      .intro-grid{grid-template-columns:1fr}
+      .time-grid{grid-template-columns:1fr}
+      .settings-grid,.deductions{grid-template-columns:1fr}
+      .floating-summary{
+        grid-template-columns:1fr 1fr;
+        bottom:12px;
+      }
+      .summary-item:nth-child(3){border-left:0}
+      .summary-item:nth-child(n+3){border-top:1px solid var(--line)}
+      .cycle-title{font-size:20px;min-width:150px}
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <button class="icon-btn" aria-label="Menu">☰</button>
+      <div class="cycle-nav">
+        <button id="prevCycle" aria-label="Previous cycle">‹</button>
+        <div class="cycle-title" id="cycleTitle"></div>
+        <button id="nextCycle" aria-label="Next cycle">›</button>
+      </div>
+      <button class="icon-btn settings-btn" id="toggleSettings" aria-label="Settings">⚙</button>
+    </header>
+
+    <section class="intro">
+      <div class="eyebrow">Four-week pay forecast</div>
+      <h1 id="paydayHeading">23 July 2026 Pay</h1>
+      <p>Estimate gross pay, night premium and take-home pay before payday.</p>
+
+      <div class="intro-grid">
+        <div class="intro-stat">
+          <span>Hourly rate</span>
+          <strong id="introRate">£14.48</strong>
+        </div>
+        <div class="intro-stat">
+          <span>Total basic time</span>
+          <strong id="introBasic">0h 0m</strong>
+        </div>
+        <div class="intro-stat">
+          <span>Night premium time</span>
+          <strong id="introPremium">0h 0m</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-panel" id="settingsPanel">
+      <div class="section-head">
+        <h2>Pay settings</h2>
+        <span>Saved for each pay cycle</span>
+      </div>
+
+      <div class="settings-grid">
+        <div class="setting">
+          <label>Hourly rate</label>
+          <input id="hourlyRate" type="number" step="0.01" />
+        </div>
+        <div class="setting">
+          <label>Payday</label>
+          <input id="payday" type="date" />
+        </div>
+        <div class="setting">
+          <label>PAYE estimate %</label>
+          <input id="payePercent" type="number" step="0.01" />
+        </div>
+        <div class="setting">
+          <label>NI estimate %</label>
+          <input id="niPercent" type="number" step="0.01" />
+        </div>
+      </div>
+
+      <div class="deductions">
+        <div class="setting">
+          <label>Other fixed deductions</label>
+          <input id="otherDeductions" type="number" step="0.01" />
+        </div>
+        <div class="setting">
+          <label>Cycle note</label>
+          <input id="cycleNote" type="text" placeholder="Optional note" />
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Four-week cycle</h2>
+        <span>Basic time includes all hours worked</span>
+      </div>
+      <div class="weeks" id="weeks"></div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Pay cycle history</h2>
+        <span>Jump between forecasts</span>
+      </div>
+      <div class="history" id="history"></div>
+    </section>
+  </main>
+
+  <aside class="floating-summary">
+    <div class="grab"></div>
+    <div class="summary-item">
+      <div class="summary-label">Basic Pay</div>
+      <div class="summary-value" id="basicTotal">£0.00</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">Night Premium</div>
+      <div class="summary-value" id="premiumTotal">£0.00</div>
+    </div>
+    <div class="summary-item deduct">
+      <div class="summary-label">Estimated Deductions</div>
+      <div class="summary-value" id="deductionTotal">£0.00</div>
+    </div>
+    <div class="summary-item net">
+      <div class="summary-label">Estimated Net</div>
+      <div class="summary-value" id="netTotal">£0.00</div>
+    </div>
+  </aside>
+
+<script>
+  const formatMoney = value => new Intl.NumberFormat('en-GB',{
+    style:'currency',currency:'GBP'
+  }).format(Number(value || 0));
+
+  const pad = n => String(n).padStart(2,'0');
+  const dateKey = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+  const defaultCycle = {
+    payday:'2026-07-23',
+    hourlyRate:14.48,
+    payePercent:9.73,
+    niPercent:6.97,
+    otherDeductions:15.40,
+    cycleNote:'',
+    weeks:[
+      {week:36,start:'2026-06-14',basicHours:40,basicMinutes:30,premiumHours:3,premiumMinutes:0},
+      {week:37,start:'2026-06-21',basicHours:40,basicMinutes:0,premiumHours:4,premiumMinutes:0},
+      {week:38,start:'2026-06-28',basicHours:39,basicMinutes:0,premiumHours:0,premiumMinutes:0},
+      {week:39,start:'2026-07-05',basicHours:45,basicMinutes:0,premiumHours:5,premiumMinutes:0}
+    ]
+  };
+
+  let state = JSON.parse(localStorage.getItem('wageForecastData') || '{}');
+  let currentKey = defaultCycle.payday;
+
+  if(!state[currentKey]){
+    state[currentKey] = JSON.parse(JSON.stringify(defaultCycle));
+    save();
+  }
+
+  function save(){
+    localStorage.setItem('wageForecastData',JSON.stringify(state));
+  }
+
+  function cycle(){
+    return state[currentKey];
+  }
+
+  function hoursValue(hours,minutes){
+    return Number(hours || 0) + Number(minutes || 0)/60;
+  }
+
+  function timeLabel(hours){
+    const totalMinutes = Math.round(hours*60);
+    const h = Math.floor(totalMinutes/60);
+    const m = totalMinutes%60;
+    return `${h}h ${m}m`;
+  }
+
+  function prettyDate(dateString){
+    return new Date(dateString+'T12:00:00').toLocaleDateString('en-GB',{
+      day:'numeric',month:'long',year:'numeric'
+    });
+  }
+
+  function weekRange(startString){
+    const start = new Date(startString+'T12:00:00');
+    const end = new Date(start);
+    end.setDate(end.getDate()+6);
+    return `${start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} to ${end.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`;
+  }
+
+  function render(){
+    const data = cycle();
+
+    document.getElementById('cycleTitle').textContent = new Date(data.payday+'T12:00:00').toLocaleDateString('en-GB',{
+      day:'numeric',month:'short',year:'numeric'
+    });
+    document.getElementById('paydayHeading').textContent = `${prettyDate(data.payday)} Pay`;
+
+    document.getElementById('hourlyRate').value = data.hourlyRate;
+    document.getElementById('payday').value = data.payday;
+    document.getElementById('payePercent').value = data.payePercent;
+    document.getElementById('niPercent').value = data.niPercent;
+    document.getElementById('otherDeductions').value = data.otherDeductions;
+    document.getElementById('cycleNote').value = data.cycleNote || '';
+
+    document.getElementById('introRate').textContent = formatMoney(data.hourlyRate);
+
+    const weeks = document.getElementById('weeks');
+    weeks.innerHTML = '';
+
+    data.weeks.forEach((week,index)=>{
+      const basicHours = hoursValue(week.basicHours,week.basicMinutes);
+      const premiumHours = hoursValue(week.premiumHours,week.premiumMinutes);
+      const basicPay = basicHours * data.hourlyRate;
+      const premiumPay = premiumHours * data.hourlyRate / 3;
+      const total = basicPay + premiumPay;
+
+      const card = document.createElement('article');
+      card.className = 'week-card';
+      card.innerHTML = `
+        <div class="week-top">
+          <div class="week-badge">${week.week}</div>
+          <div class="week-copy">
+            <h3>Week ${week.week}</h3>
+            <p>${weekRange(week.start)}</p>
+          </div>
+          <div class="week-total">
+            <span>Week total</span>
+            <strong>${formatMoney(total)}</strong>
+          </div>
+        </div>
+
+        <div class="time-grid">
+          <div class="time-block">
+            <label>Basic time</label>
+            <div class="time-inputs">
+              <div class="field">
+                <input data-field="basicHours" data-index="${index}" type="number" min="0" step="1" value="${week.basicHours}">
+                <span>hrs</span>
+              </div>
+              <div class="field">
+                <input data-field="basicMinutes" data-index="${index}" type="number" min="0" max="59" step="1" value="${week.basicMinutes}">
+                <span>min</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="time-block">
+            <label>Night premium time</label>
+            <div class="time-inputs">
+              <div class="field">
+                <input data-field="premiumHours" data-index="${index}" type="number" min="0" step="1" value="${week.premiumHours}">
+                <span>hrs</span>
+              </div>
+              <div class="field">
+                <input data-field="premiumMinutes" data-index="${index}" type="number" min="0" max="59" step="1" value="${week.premiumMinutes}">
+                <span>min</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="premium-note">Night premium adds one-third of the hourly rate for time worked between 22:00 and 06:00.</div>
+
+        <div class="breakdown">
+          <div class="mini-stat">
+            <span>Basic pay</span>
+            <strong>${formatMoney(basicPay)}</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Premium pay</span>
+            <strong>${formatMoney(premiumPay)}</strong>
+          </div>
+          <div class="mini-stat">
+            <span>Total time</span>
+            <strong>${timeLabel(basicHours)}</strong>
+          </div>
+        </div>
+      `;
+      weeks.appendChild(card);
+    });
+
+    document.querySelectorAll('[data-field]').forEach(input=>{
+      input.oninput = e=>{
+        const index = Number(e.target.dataset.index);
+        const field = e.target.dataset.field;
+        data.weeks[index][field] = Number(e.target.value || 0);
+        save();
+        render();
+      };
+    });
+
+    updateTotals();
+    renderHistory();
+  }
+
+  function updateTotals(){
+    const data = cycle();
+
+    let totalBasicHours = 0;
+    let totalPremiumHours = 0;
+
+    data.weeks.forEach(week=>{
+      totalBasicHours += hoursValue(week.basicHours,week.basicMinutes);
+      totalPremiumHours += hoursValue(week.premiumHours,week.premiumMinutes);
+    });
+
+    const basicPay = totalBasicHours * data.hourlyRate;
+    const premiumPay = totalPremiumHours * data.hourlyRate / 3;
+    const gross = basicPay + premiumPay;
+    const paye = gross * (Number(data.payePercent || 0)/100);
+    const ni = gross * (Number(data.niPercent || 0)/100);
+    const deductions = paye + ni + Number(data.otherDeductions || 0);
+    const net = gross - deductions;
+
+    document.getElementById('introBasic').textContent = timeLabel(totalBasicHours);
+    document.getElementById('introPremium').textContent = timeLabel(totalPremiumHours);
+    document.getElementById('basicTotal').textContent = formatMoney(basicPay);
+    document.getElementById('premiumTotal').textContent = formatMoney(premiumPay);
+    document.getElementById('deductionTotal').textContent = formatMoney(deductions);
+    document.getElementById('netTotal').textContent = formatMoney(net);
+  }
+
+  function bindSettings(){
+    const data = cycle();
+
+    document.getElementById('hourlyRate').oninput = e=>{
+      data.hourlyRate = Number(e.target.value || 0);
+      save(); render();
+    };
+
+    document.getElementById('payePercent').oninput = e=>{
+      data.payePercent = Number(e.target.value || 0);
+      save(); updateTotals();
+    };
+
+    document.getElementById('niPercent').oninput = e=>{
+      data.niPercent = Number(e.target.value || 0);
+      save(); updateTotals();
+    };
+
+    document.getElementById('otherDeductions').oninput = e=>{
+      data.otherDeductions = Number(e.target.value || 0);
+      save(); updateTotals();
+    };
+
+    document.getElementById('cycleNote').oninput = e=>{
+      data.cycleNote = e.target.value;
+      save();
+    };
+
+    document.getElementById('payday').onchange = e=>{
+      const newKey = e.target.value;
+      if(!newKey || newKey === currentKey) return;
+      state[newKey] = data;
+      state[newKey].payday = newKey;
+      delete state[currentKey];
+      currentKey = newKey;
+      save();
+      render();
+      bindSettings();
+    };
+  }
+
+  function createAdjacentCycle(direction){
+    const current = cycle();
+    const date = new Date(current.payday+'T12:00:00');
+    date.setDate(date.getDate() + (28 * direction));
+    const newKey = dateKey(date);
+
+    if(!state[newKey]){
+      const weeks = current.weeks.map(week=>{
+        const start = new Date(week.start+'T12:00:00');
+        start.setDate(start.getDate() + (28 * direction));
+        return {
+          week:week.week + (4 * direction),
+          start:dateKey(start),
+          basicHours:0,
+          basicMinutes:0,
+          premiumHours:0,
+          premiumMinutes:0
+        };
+      });
+
+      state[newKey] = {
+        payday:newKey,
+        hourlyRate:current.hourlyRate,
+        payePercent:current.payePercent,
+        niPercent:current.niPercent,
+        otherDeductions:current.otherDeductions,
+        cycleNote:'',
+        weeks
+      };
+      save();
+    }
+
+    currentKey = newKey;
+    render();
+    bindSettings();
+  }
+
+  function renderHistory(){
+    const history = document.getElementById('history');
+    history.innerHTML = '';
+
+    Object.keys(state).sort().forEach(key=>{
+      const btn = document.createElement('button');
+      btn.className = `cycle-pill ${key===currentKey?'active':''}`;
+      btn.textContent = new Date(key+'T12:00:00').toLocaleDateString('en-GB',{
+        day:'numeric',month:'short',year:'numeric'
+      });
+      btn.onclick = ()=>{
+        currentKey = key;
+        render();
+        bindSettings();
+      };
+      history.appendChild(btn);
+    });
+  }
+
+  document.getElementById('toggleSettings').onclick = ()=>{
+    document.getElementById('settingsPanel').classList.toggle('open');
+  };
+
+  document.getElementById('prevCycle').onclick = ()=>createAdjacentCycle(-1);
+  document.getElementById('nextCycle').onclick = ()=>createAdjacentCycle(1);
+
+  render();
+  bindSettings();
+</script>
+</body>
+</html>
