@@ -65,3 +65,51 @@ def test_budget_api_persists_wage_forecast_data(tmp_path):
         saved = client.get("/api/budget").get_json()
         assert saved["wageForecast"]["settings"]["hourlyRate"] == 15.25
         assert saved["wageForecast"]["cycles"]["2026-08-20"]["weeks"][0]["nightMinutes"] == 30
+
+
+def test_icon_api_caches_remote_images(tmp_path, monkeypatch):
+    money_app.ICON_CACHE_DIR = tmp_path / "icon_cache"
+    calls = []
+
+    class FakeHeaders:
+        def get_content_type(self):
+            return "image/png"
+
+    class FakeResponse:
+        headers = FakeHeaders()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            calls.append("read")
+            return b"fake-png"
+
+    def fake_urlopen(_request, timeout):
+        calls.append(timeout)
+        return FakeResponse()
+
+    monkeypatch.setattr(money_app, "urlopen", fake_urlopen)
+
+    with money_app.app.test_client() as client:
+        first = client.get("/api/icon?url=https%3A%2F%2Fexample.com%2Ficon.png")
+        second = client.get("/api/icon?url=https%3A%2F%2Fexample.com%2Ficon.png")
+
+    assert first.status_code == 200
+    assert first.data == b"fake-png"
+    assert second.status_code == 200
+    assert second.data == b"fake-png"
+    assert calls == [money_app.ICON_FETCH_TIMEOUT, "read"]
+    assert len(list(money_app.ICON_CACHE_DIR.iterdir())) == 1
+
+
+def test_icon_api_rejects_non_http_urls(tmp_path):
+    money_app.ICON_CACHE_DIR = tmp_path / "icon_cache"
+
+    with money_app.app.test_client() as client:
+        response = client.get("/api/icon?url=file%3A%2F%2F%2Fetc%2Fpasswd")
+
+    assert response.status_code == 400

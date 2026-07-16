@@ -739,8 +739,10 @@
     const icon = String(payment.icon || companyIconFor(payment.name) || '').trim();
     if(icon){
       const safeIcon = escapeHtml(icon);
-      const isImage = /^https?:\/\//i.test(icon) || icon.startsWith('data:image/');
-      return `<div class="payment-icon custom-icon">${isImage ? `<img src="${safeIcon}" alt="">` : safeIcon}</div>`;
+      const isRemoteImage = /^https?:\/\//i.test(icon);
+      const isImage = isRemoteImage || icon.startsWith('data:image/');
+      const imageSrc = isRemoteImage ? `api/icon?url=${encodeURIComponent(icon)}` : safeIcon;
+      return `<div class="payment-icon custom-icon">${isImage ? `<img src="${imageSrc}" alt="" loading="lazy">` : safeIcon}</div>`;
     }
     return `<div class="payment-icon">${escapeHtml(String(payment.name || '').slice(0,2).toUpperCase())}</div>`;
   }
