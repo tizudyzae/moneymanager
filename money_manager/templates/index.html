@@ -235,7 +235,10 @@
       display:grid;place-items:center;
       background:#fff0e6;color:var(--orange);
       font-size:19px;font-weight:850;
+      overflow:hidden;
     }
+    .payment-icon.custom-icon{font-size:22px}
+    .payment-icon img{width:100%;height:100%;object-fit:cover}
 
     .payment-card:nth-child(3n+2) .payment-icon{background:#eeebff;color:var(--purple)}
     .payment-card:nth-child(3n+3) .payment-icon{background:#e4f7ff;color:#149bd1}
@@ -321,10 +324,12 @@
       border:1px solid var(--line);
       border-radius:18px;
       background:white;
-      grid-template-columns:1fr 110px 100px auto;
+      grid-template-columns:1fr 1fr 110px 100px auto;
       gap:9px;
     }
     .add-payment-panel.open{display:grid}
+    .recurring-card{grid-template-columns:48px minmax(0,1fr) 94px 28px 28px}
+    .recurring-card .payment-editor{grid-column:2 / -1;grid-template-columns:1fr}
     .add-payment-panel input{
       width:100%;
       border:1px solid var(--line);
@@ -361,8 +366,7 @@
     .calendar-list,.settings-grid,.wage-grid{display:grid;gap:12px}
     .calendar-item,label,.wage-card{border:1px solid var(--line);border-radius:18px;background:white;padding:14px}
     label{display:grid;gap:8px;font-weight:800} label small{font-weight:500;color:var(--muted)} textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
-    .wage-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
-    .wage-nav button{border:0;border-radius:12px;background:var(--purple-soft);color:var(--purple);padding:10px 13px;font-weight:800}
+    .wage-nav{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px}
     .wage-cycle-title{font-size:17px;font-weight:900;text-align:center}
     .wage-cycle-sub{margin-top:4px;color:var(--muted);font-size:13px;text-align:center}
     .wage-settings{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
@@ -371,7 +375,12 @@
     .wage-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
     .wage-field{display:grid;gap:6px;font-weight:800;color:var(--text)}
     .wage-field span{font-size:12px;color:var(--muted)}
-    .wage-field input{width:100%;min-height:44px;border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit;font-size:16px}
+    .wage-field input{width:100%;min-height:44px;border:1px solid rgba(255,255,255,.7);border-radius:12px;padding:10px;font:inherit;font-size:16px;background:rgba(255,255,255,.82)}
+    #wageWeeks{display:grid;gap:12px}
+    .wage-card.week-colour-1{background:#fff7ed;border-color:#fed7aa}
+    .wage-card.week-colour-2{background:#eef2ff;border-color:#c7d2fe}
+    .wage-card.week-colour-3{background:#ecfdf5;border-color:#bbf7d0}
+    .wage-card.week-colour-4{background:#fdf2f8;border-color:#fbcfe8}
     .wage-results{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;color:var(--muted);font-size:13px}.wage-results strong{display:block;color:var(--text);font-size:16px;margin-top:3px}
     .validation-message{color:var(--red);font-size:13px;font-weight:750;margin-top:8px}
     .calendar-item strong{display:block}.calendar-item span{color:var(--muted);font-size:13px}
@@ -579,12 +588,10 @@
     <section class="section app-view" id="wagesView" hidden>
       <div class="section-head"><h2>Wage Forecast</h2></div>
       <div class="wage-nav">
-        <button id="prevWageCycle" type="button">‹ Previous</button>
         <div>
           <div class="wage-cycle-title" id="wageCycleTitle"></div>
           <div class="wage-cycle-sub">Four consecutive payroll weeks</div>
         </div>
-        <button id="nextWageCycle" type="button">Next ›</button>
       </div>
       <div class="wage-grid">
         <div class="wage-card">
@@ -609,6 +616,7 @@
           <div id="recurringList" class="payments"></div>
           <div class="add-payment-panel open recurring-add">
             <input id="recName" placeholder="Name" />
+            <input id="recIcon" placeholder="Icon (emoji or image URL)" />
             <input id="recAmount" type="number" step="0.01" placeholder="Amount" />
             <input id="recDay" type="number" min="1" max="31" placeholder="Due day" />
             <button class="primary" id="addRecurring">Add recurring</button>
@@ -718,8 +726,31 @@
     return currentPaydayPeriod();
   }
 
+
+  const companyIcons = {
+    rent:'🏠', 'council tax':'🏛️', internet:'🌐', energy:'⚡', water:'💧', 'energy credit':'⚡', 'car tax':'🚗', aa:'🛟', admiral:'🚘', petrol:'⛽', barclayloan:'🏦', 'icloud drive':'☁️', vodafone:'📱', food:'🛒', 'youtube premium':'▶️', 'google drive':'△', 'first direct':'🏦', 'apple care':'🍎', barclaycard:'💳', puregym:'🏋️', chatgpt:'✦', paypal:'P'
+  };
+
+  function companyIconFor(name){
+    return companyIcons[String(name || '').trim().toLowerCase()] || '';
+  }
+
+  function iconMarkup(payment){
+    const icon = String(payment.icon || companyIconFor(payment.name) || '').trim();
+    if(icon){
+      const safeIcon = escapeHtml(icon);
+      const isImage = /^https?:\/\//i.test(icon) || icon.startsWith('data:image/');
+      return `<div class="payment-icon custom-icon">${isImage ? `<img src="${safeIcon}" alt="">` : safeIcon}</div>`;
+    }
+    return `<div class="payment-icon">${escapeHtml(String(payment.name || '').slice(0,2).toUpperCase())}</div>`;
+  }
+
+  function escapeHtml(value){
+    return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  }
+
   function paymentFromRecurring(payment){
-    return {...payment, id:crypto.randomUUID?.() || String(Math.random()), recurringId:payment.id, paid:false};
+    return {...payment, icon: payment.icon || companyIconFor(payment.name), id:crypto.randomUUID?.() || String(Math.random()), recurringId:payment.id, paid:false};
   }
 
   function syncRecurringPaymentsForPayday(paydayKey){
@@ -733,6 +764,7 @@
       if(existing){
         existing.name = recurring.name;
         existing.day = recurring.day;
+        existing.icon = recurring.icon || companyIconFor(recurring.name);
         if(isFutureMonth || !existing.paid) existing.amount = Number(recurring.amount || 0);
       }else if(isFutureMonth){
         month.payments.push(paymentFromRecurring(recurring));
@@ -797,7 +829,7 @@
     if(!filtered.length){ list.innerHTML = `<div class="empty">No ${activeFilter === 'all' ? '' : activeFilter} payments for this payday.</div>`; return; }
     filtered.forEach(payment=>{
       const row = document.createElement('article'); row.className = `payment-card ${payment.paid ? 'paid' : ''} ${isAutoDailyPayment(payment) ? 'auto-payment' : ''}`;
-      row.innerHTML = `<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · ${dueText(payment.day,payment.paid)}${isAutoDailyPayment(payment) && isCurrentPaydayPeriod() ? ` · ${daysLeftInPayCycle()} days × ${formatMoney(dailyAmountFor(payment))}` : ''}</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}>${isAutoDailyPayment(payment) ? '' : `<button class="check ${payment.paid?'on':''}">${payment.paid?'✓':''}</button>`}<button class="more">⋮</button><div class="payment-editor"><input class="edit-name" value="${payment.name}" ${isAutoDailyPayment(payment) ? 'readonly' : ''}><input class="edit-day" type="number" min="1" max="31" value="${payment.day}"><input class="edit-amount" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}><button class="danger">Delete</button></div>`;
+      row.innerHTML = `${iconMarkup(payment)}<div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · ${dueText(payment.day,payment.paid)}${isAutoDailyPayment(payment) && isCurrentPaydayPeriod() ? ` · ${daysLeftInPayCycle()} days × ${formatMoney(dailyAmountFor(payment))}` : ''}</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}>${isAutoDailyPayment(payment) ? '' : `<button class="check ${payment.paid?'on':''}">${payment.paid?'✓':''}</button>`}<button class="more">⋮</button><div class="payment-editor"><input class="edit-name" value="${payment.name}" ${isAutoDailyPayment(payment) ? 'readonly' : ''}><input class="edit-day" type="number" min="1" max="31" value="${payment.day}"><input class="edit-amount" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}" ${isAutoDailyPayment(payment) || payment.paid ? 'readonly' : ''}><button class="danger">Delete</button></div>`;
       row.querySelector('.amount-input').onchange = e => { if(isAutoDailyPayment(payment) || payment.paid) return; payment.amount = parseMoney(e.target.value); apiSave(); updateSummary(); renderPayments(); };
       const checkButton = row.querySelector('.check');
       if(checkButton) checkButton.onclick = () => { payment.paid = !payment.paid; apiSave(); render(); };
@@ -915,7 +947,7 @@
     const totals = calculateWageTotals(); wageWeeks.innerHTML = '';
     totals.weeks.forEach((week, index)=>{
       const weekStart = addDays(start, index * 7); const weekEnd = addDays(weekStart, 6);
-      const card = document.createElement('article'); card.className = 'wage-card';
+      const card = document.createElement('article'); card.className = `wage-card week-colour-${index + 1}`;
       const weekNumber = wageWeekNumber(weekStart);
       card.innerHTML = `<div class="wage-week-head"><div><h3>Week ${weekNumber}</h3><div class="wage-cycle-sub">w/c ${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} · ${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div></div><div class="wage-week-total">${formatMoney(week.gross)}</div></div><div class="wage-fields"><label class="wage-field"><span>Basic hours</span><input data-index="${index}" data-key="basicHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.basicHours}"></label><label class="wage-field"><span>Basic minutes</span><input data-index="${index}" data-key="basicMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.basicMinutes}"></label><label class="wage-field"><span>Night premium hours</span><input data-index="${index}" data-key="nightHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.nightHours}"></label><label class="wage-field"><span>Night premium minutes</span><input data-index="${index}" data-key="nightMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.nightMinutes}"></label></div><div class="wage-results"><div>Basic pay<strong>${formatMoney(week.basicPay)}</strong></div><div>Night premium<strong>${formatMoney(week.nightPremium)}</strong></div><div>Week gross<strong>${formatMoney(week.gross)}</strong></div></div>`;
       card.querySelectorAll('input').forEach(input=>input.onchange=e=>{ const i=Number(e.target.dataset.index); const key=e.target.dataset.key; cycle.weeks[i][key] = key.includes('Minutes') ? clampMinutes(e.target.value) : clampNumber(e.target.value, 0); apiSave(); renderWages(); updateSummary(); });
@@ -926,7 +958,7 @@
 
   function renderSettings(){
     paydaysInput.value = sortedPaydays().join('\n'); dailyFoodAmount.value = Number(state.settings.dailyFoodAmount || 0).toFixed(2); dailyPetrolAmount.value = Number(state.settings.dailyPetrolAmount || 0).toFixed(2); recurringList.innerHTML='';
-    state.recurringPayments.forEach(payment=>{ const row=document.createElement('article'); row.className='payment-card'; row.innerHTML=`<div class="payment-icon">${payment.name.slice(0,2).toUpperCase()}</div><div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · Recurring every payday period</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}"><button class="check ${payment.active!==false?'on':''}">${payment.active!==false?'✓':''}</button><button class="danger">×</button>`; row.querySelector('.amount-input').onchange=e=>{payment.amount=parseMoney(e.target.value); e.target.value=formatMoney(payment.amount); syncFutureRecurringPayments(); apiSave(); render();}; row.querySelector('.check').onclick=()=>{payment.active=payment.active===false; syncFutureRecurringPayments(); apiSave(); render();}; row.querySelector('.danger').onclick=()=>{state.recurringPayments=state.recurringPayments.filter(p=>p.id!==payment.id); syncFutureRecurringPayments(); apiSave(); render();}; recurringList.appendChild(row); });
+    state.recurringPayments.forEach(payment=>{ payment.icon ||= companyIconFor(payment.name); const row=document.createElement('article'); row.className='payment-card recurring-card'; row.innerHTML=`${iconMarkup(payment)}<div class="payment-copy"><div class="payment-name">${payment.name}</div><div class="payment-meta">Payment date: ${payment.day || 1} · Icon: ${payment.icon || 'initials'} · Recurring every payday period</div></div><input class="amount-input" type="text" inputmode="decimal" value="${formatMoney(payment.amount)}"><button class="check ${payment.active!==false?'on':''}">${payment.active!==false?'✓':''}</button><button class="more">⋮</button><button class="danger">×</button><div class="payment-editor"><input class="edit-icon" placeholder="Icon (emoji or image URL)" value="${payment.icon || ''}"></div>`; row.querySelector('.amount-input').onchange=e=>{payment.amount=parseMoney(e.target.value); e.target.value=formatMoney(payment.amount); syncFutureRecurringPayments(); apiSave(); render();}; row.querySelector('.more').onclick=()=>row.classList.toggle('editing'); row.querySelector('.edit-icon').onchange=e=>{payment.icon=e.target.value.trim(); syncFutureRecurringPayments(); apiSave(); render();}; row.querySelector('.check').onclick=()=>{payment.active=payment.active===false; syncFutureRecurringPayments(); apiSave(); render();}; row.querySelector('.danger').onclick=()=>{state.recurringPayments=state.recurringPayments.filter(p=>p.id!==payment.id); syncFutureRecurringPayments(); apiSave(); render();}; recurringList.appendChild(row); });
   }
 
   function setView(view){
@@ -943,10 +975,8 @@
   document.querySelectorAll('.filter-tabs button').forEach(button=>{ button.onclick=()=>{ activeFilter=button.dataset.filter; document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active')); button.classList.add('active'); renderPayments(); }; });
   topAddPayment.onclick = ()=>{ addPanel.classList.toggle('open'); if(addPanel.classList.contains('open')) newName.focus(); };
   addPayment.onclick = ()=>{ const data=ensurePayday(); const name=newName.value.trim(); if(!name) return; data.payments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(newAmount.value||0), day:Math.max(1,Math.min(31,Number(newDay.value||1))), paid:false}); newName.value=newAmount.value=newDay.value=''; addPanel.classList.remove('open'); apiSave(); render(); };
-  addRecurring.onclick = ()=>{ const name=recName.value.trim(); if(!name) return; state.recurringPayments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(recAmount.value||0), day:Math.max(1,Math.min(31,Number(recDay.value||1))), active:true}); recName.value=recAmount.value=recDay.value=''; syncFutureRecurringPayments(); apiSave(); render(); };
+  addRecurring.onclick = ()=>{ const name=recName.value.trim(); if(!name) return; const icon=recIcon.value.trim() || companyIconFor(name); state.recurringPayments.push({id:crypto.randomUUID?.() || String(Date.now()), name, icon, amount:Number(recAmount.value||0), day:Math.max(1,Math.min(31,Number(recDay.value||1))), active:true}); recName.value=recIcon.value=recAmount.value=recDay.value=''; syncFutureRecurringPayments(); apiSave(); render(); };
   saveSettings.onclick = ()=>{ state.settings.paydays = paydaysInput.value.split(/\s+/).filter(Boolean).sort(); state.settings.dailyFoodAmount = parseMoney(dailyFoodAmount.value); state.settings.dailyPetrolAmount = parseMoney(dailyPetrolAmount.value); currentPayday = nearestPayday(); currentWagePayday = currentPayday; syncFutureRecurringPayments(); syncAutomaticPayments(); apiSave(); render(); };
-  prevWageCycle.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.max(0,i-1)] || currentPayday; currentWagePayday=currentPayday; render(); };
-  nextWageCycle.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.min(p.length-1,i+1)] || currentPayday; currentWagePayday=currentPayday; render(); };
   [wageHourlyRate,wagePayePercent,wageNiPercent,wageFixedDeductions].forEach(input=>input.onchange=e=>{ const map={wageHourlyRate:'hourlyRate',wagePayePercent:'payePercent',wageNiPercent:'niPercent',wageFixedDeductions:'fixedDeductions'}; const key=map[e.target.id]; state.wageForecast.settings[key] = key.includes('Percent') ? clampNumber(e.target.value,0,100) : clampNumber(e.target.value,0); apiSave(); renderWages(); updateSummary(); });
   openSettings.onclick = ()=>{ setView('settings'); };
   document.querySelectorAll('.bottom-nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));

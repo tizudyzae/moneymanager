@@ -28,6 +28,31 @@ CREATE TABLE IF NOT EXISTS app_data (
 );
 """
 
+DEFAULT_PAYMENT_ICONS = {
+    "Rent": "🏠",
+    "Council Tax": "🏛️",
+    "Internet": "🌐",
+    "Energy": "⚡",
+    "Water": "💧",
+    "Energy Credit": "⚡",
+    "Car Tax": "🚗",
+    "AA": "🛟",
+    "Admiral": "🚘",
+    "Petrol": "⛽",
+    "Barclayloan": "🏦",
+    "iCloud Drive": "☁️",
+    "Vodafone": "📱",
+    "Food": "🛒",
+    "YouTube Premium": "▶️",
+    "Google Drive": "△",
+    "First Direct": "🏦",
+    "Apple Care": "🍎",
+    "Barclaycard": "💳",
+    "PureGym": "🏋️",
+    "ChatGPT": "✦",
+    "PayPal": "P",
+}
+
 DEFAULT_PAYMENTS = [
     ["Rent",466.67,31],["Council Tax",94.91,1],["Internet",10,5],["Energy",139.97,6],
     ["Water",42.67,6],["Energy Credit",-93.91,6],["Car Tax",17.50,2],["AA",13.01,1],
@@ -42,7 +67,7 @@ def default_budget_data():
     return {
         "settings": {"paydays": [NEXT_PAYDAY], "dailyFoodAmount": 15, "dailyPetrolAmount": 3.71},
         "recurringPayments": [
-            {"id": str(uuid.uuid4()), "name": name, "amount": amount, "day": day, "active": True}
+            {"id": str(uuid.uuid4()), "name": name, "icon": DEFAULT_PAYMENT_ICONS.get(name, ""), "amount": amount, "day": day, "active": True}
             for name, amount, day in DEFAULT_PAYMENTS
         ],
         "months": {},
@@ -122,6 +147,8 @@ def load_budget_data():
     settings.setdefault("dailyFoodAmount", 15)
     settings.setdefault("dailyPetrolAmount", 3.71)
     data.setdefault("recurringPayments", [])
+    for payment in data["recurringPayments"]:
+        payment.setdefault("icon", DEFAULT_PAYMENT_ICONS.get(payment.get("name", ""), ""))
     data.setdefault("months", {})
     wage_defaults = wage_forecast_defaults()
     wage_forecast = data.setdefault("wageForecast", wage_defaults)
