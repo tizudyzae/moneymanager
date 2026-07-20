@@ -684,7 +684,7 @@
     return Number((recurring || payment).amount || 0);
   }
   function calculatedPaymentAmount(payment){
-    return isAutoDailyPayment(payment) && isCurrentPaydayPeriod() ? daysLeftInPayCycle() * dailyAmountFor(payment) : Number(payment.amount || 0);
+    return Number(payment.amount || 0);
   }
   function syncAutomaticPayments(){
     const data = ensurePayday();
@@ -767,7 +767,8 @@
         existing.name = recurring.name;
         existing.day = recurring.day;
         existing.icon = recurring.icon || companyIconFor(recurring.name);
-        if(isFutureMonth || !existing.paid) existing.amount = Number(recurring.amount || 0);
+        const usesCurrentDailyAmount = !isFutureMonth && isAutoDailyPayment(existing);
+        if(!usesCurrentDailyAmount && (isFutureMonth || !existing.paid)) existing.amount = Number(recurring.amount || 0);
       }else if(isFutureMonth){
         month.payments.push(paymentFromRecurring(recurring));
       }
