@@ -83,11 +83,6 @@
       font-size:28px;color:var(--text);
     }
 
-    .month-control button:disabled{
-      cursor:not-allowed;
-      opacity:.28;
-    }
-
     .month-title{
       min-width:145px;
       text-align:center;
@@ -722,13 +717,9 @@
     return addDays(payday, -daysSinceMonday);
   }
 
-  function isPaydayUnlocked(paydayKey){
+  function isFirstDirectUnlocked(paydayKey){
     const today = new Date(); today.setHours(0,0,0,0);
     return today >= unlockDateForPayday(paydayKey);
-  }
-
-  function availablePaydays(){
-    return sortedPaydays().filter(isPaydayUnlocked);
   }
 
   function currentPaydayPeriod(){
@@ -831,9 +822,15 @@
     document.getElementById('monthLabel').textContent = paydayName(currentPayday);
     document.getElementById('activePaydayLabel').textContent = paydayName(currentPayday);
     const futurePayday = isFuturePaydayPeriod();
+    const firstDirectUnlocked = !futurePayday || isFirstDirectUnlocked(currentPayday);
+    if(futurePayday && firstDirectUnlocked && !data.firstDirectEstimateApplied){
+      data.balances.firstDirect = calculateWageTotals(currentPayday).net;
+      data.firstDirectEstimateApplied = true;
+      apiSave();
+    }
     ['firstDirect','lloyds','barclays'].forEach(id=>{
       const input = document.getElementById(id);
-      const estimatedFirstDirect = id === 'firstDirect' && futurePayday;
+      const estimatedFirstDirect = id === 'firstDirect' && futurePayday && !firstDirectUnlocked;
       const displayValue = estimatedFirstDirect ? calculateWageTotals(currentPayday).net : (data.balances[id] || 0);
       input.value = formatMoney(displayValue);
       input.readOnly = estimatedFirstDirect;
@@ -841,11 +838,7 @@
       input.oninput = e => { if(estimatedFirstDirect) return; data.balances[id] = parseMoney(e.target.value); apiSave(); updateSummary(); };
       input.onblur = () => input.value = formatMoney(estimatedFirstDirect ? calculateWageTotals(currentPayday).net : (data.balances[id] || 0));
     });
-    firstDirectStatus.textContent = futurePayday ? 'Estimated' : 'Available';
-    const paydays = availablePaydays();
-    const paydayIndex = paydays.indexOf(currentPayday);
-    prevMonth.disabled = paydayIndex <= 0;
-    nextMonth.disabled = paydayIndex < 0 || paydayIndex >= paydays.length - 1;
+    firstDirectStatus.textContent = futurePayday && !firstDirectUnlocked ? 'Estimated' : 'Available';
     renderPayments(); updateSummary(); renderHistory(); renderCalendar(); renderWages(); renderSettings(); setView(activeView);
   }
 
@@ -888,21 +881,22 @@
     document.querySelectorAll('.summary-label')[0].textContent = 'Total Available';
     document.querySelectorAll('.summary-label')[1].textContent = 'Left To Pay';
     document.querySelectorAll('.summary-label')[2].textContent = 'Projected Leftover';
-    document.querySelectorAll('.summary-sub')[0].textContent = isFuturePaydayPeriod() ? 'Estimated net from wages' : 'Across 3 accounts';
+    const usingWageEstimate = isFuturePaydayPeriod() && !isFirstDirectUnlocked(currentPayday);
+    document.querySelectorAll('.summary-sub')[0].textContent = usingWageEstimate ? 'Estimated net from wages' : 'Across 3 accounts';
     document.querySelectorAll('.summary-sub')[2].textContent = 'After all payments';
     syncAutomaticPayments();
-    const data = ensurePayday(); const wageNet = isFuturePaydayPeriod() ? calculateWageTotals(currentPayday).net : 0; const savedTotal = Object.values(data.balances).reduce((a,b)=>a+Number(b||0),0); const total = isFuturePaydayPeriod() ? wageNet : savedTotal; const unpaid = data.payments.filter(p=>!p.paid); const left = unpaid.reduce((a,p)=>a+calculatedPaymentAmount(p),0);
+    const data = ensurePayday(); const wageNet = usingWageEstimate ? calculateWageTotals(currentPayday).net : 0; const savedTotal = Object.values(data.balances).reduce((a,b)=>a+Number(b||0),0); const total = usingWageEstimate ? wageNet : savedTotal; const unpaid = data.payments.filter(p=>!p.paid); const left = unpaid.reduce((a,p)=>a+calculatedPaymentAmount(p),0);
     document.getElementById('totalAvailable').textContent = formatMoney(total); document.getElementById('leftToPay').textContent = formatMoney(left); document.getElementById('leftover').textContent = formatMoney(total-left); document.getElementById('remainingPayments').textContent = `${unpaid.length} payment${unpaid.length===1?'':'s'}`;
   }
 
   function renderHistory(){
     const history = document.getElementById('monthHistory'); history.innerHTML = '';
-    Object.keys(state.months).filter(isPaydayUnlocked).sort().forEach(key=>{ const btn=document.createElement('button'); btn.className=`month-pill ${key===currentPayday?'active':''}`; btn.textContent=paydayName(key); btn.onclick=()=>{currentPayday=key; currentWagePayday=key; activeView='overview'; render();}; history.appendChild(btn); });
+    Object.keys(state.months).sort().forEach(key=>{ const btn=document.createElement('button'); btn.className=`month-pill ${key===currentPayday?'active':''}`; btn.textContent=paydayName(key); btn.onclick=()=>{currentPayday=key; currentWagePayday=key; activeView='overview'; render();}; history.appendChild(btn); });
   }
 
   function renderCalendar(){
     const list = document.getElementById('calendarList'); list.innerHTML='';
-    sortedPaydays().forEach(day=>{ const data=state.months[day]; const unlocked=isPaydayUnlocked(day); const item=document.createElement('div'); item.className='calendar-item'; item.innerHTML=`<strong>${paydayName(day)}</strong><span>${unlocked ? (data ? `${data.payments.length} payments tracked` : 'Not started yet') : `Unlocks ${unlockDateForPayday(day).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})}`}</span>`; if(unlocked) item.onclick=()=>{currentPayday=day; currentWagePayday=day; activeView='overview'; render();}; list.appendChild(item); });
+    sortedPaydays().forEach(day=>{ const data=state.months[day]; const item=document.createElement('div'); item.className='calendar-item'; item.innerHTML=`<strong>${paydayName(day)}</strong><span>${data ? `${data.payments.length} payments tracked` : 'Not started yet'}</span>`; item.onclick=()=>{currentPayday=day; currentWagePayday=day; activeView='overview'; render();}; list.appendChild(item); });
   }
 
   function ensureWageForecast(){
@@ -997,8 +991,8 @@
     updateSummary();
   }
 
-  prevMonth.onclick = ()=>{ const p=availablePaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.max(0,i-1)] || currentPayday; currentWagePayday=currentPayday; render(); };
-  nextMonth.onclick = ()=>{ const p=availablePaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.min(p.length-1,i+1)] || currentPayday; currentWagePayday=currentPayday; render(); };
+  prevMonth.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.max(0,i-1)] || currentPayday; currentWagePayday=currentPayday; render(); };
+  nextMonth.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.min(p.length-1,i+1)] || currentPayday; currentWagePayday=currentPayday; render(); };
   document.querySelectorAll('.filter-tabs button').forEach(button=>{ button.onclick=()=>{ activeFilter=button.dataset.filter; document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active')); button.classList.add('active'); renderPayments(); }; });
   topAddPayment.onclick = ()=>{ addPanel.classList.toggle('open'); if(addPanel.classList.contains('open')) newName.focus(); };
   addPayment.onclick = ()=>{ const data=ensurePayday(); const name=newName.value.trim(); if(!name) return; data.payments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(newAmount.value||0), day:Math.max(1,Math.min(31,Number(newDay.value||1))), paid:false}); newName.value=newAmount.value=newDay.value=''; addPanel.classList.remove('open'); apiSave(); render(); };
