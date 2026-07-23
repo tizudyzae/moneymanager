@@ -1,6 +1,6 @@
 name: "Money Manager"
 description: "Personal budgeting, spending, and wage tracker for Home Assistant."
-version: "0.2.9"
+version: "0.2.10"
 slug: "money_manager"
 init: false
 arch:
@@ -13,10 +13,14 @@ startup: services
 boot: auto
 ingress: true
 ingress_port: 8099
+hassio_api: true
+hassio_role: default
 panel_icon: mdi:cash-multiple
 map:
   - addon_config:rw
 options:
   currency: "£"
+  rota_importer_url: ""
 schema:
   currency: "str"
+  rota_importer_url: "str"
