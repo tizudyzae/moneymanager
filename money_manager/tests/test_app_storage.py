@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -113,3 +114,51 @@ def test_icon_api_rejects_non_http_urls(tmp_path):
         response = client.get("/api/icon?url=file%3A%2F%2F%2Fetc%2Fpasswd")
 
     assert response.status_code == 400
+
+
+def test_rota_preview_api_requests_exact_range_without_mutating_budget(tmp_path, monkeypatch):
+    money_app.DB_PATH = tmp_path / "money_manager.db"
+    requested = {}
+
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self):
+            return json.dumps({"shifts": [{"id": "one", "date": "2026-06-14", "start": "22:00", "finish": "06:00", "break_minutes": 0}]}).encode()
+
+    def fake_urlopen(request, timeout):
+        requested["url"], requested["timeout"] = request.full_url, timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(money_app, "urlopen", fake_urlopen)
+    with money_app.app.test_client() as client:
+        before = client.get("/api/budget").get_json()
+        response = client.post("/api/wages/import-rota-preview", json={"payday": "2026-07-23"})
+        after = client.get("/api/budget").get_json()
+
+    assert response.status_code == 200
+    assert "start_date=2026-06-14&end_date=2026-07-11" in requested["url"]
+    assert response.get_json()["weeks"][0]["night_minutes"] == 480
+    assert before == after
+
+
+def test_rota_preview_api_failure_does_not_modify_wage_cycle(tmp_path, monkeypatch):
+    money_app.DB_PATH = tmp_path / "money_manager.db"
+
+    def invalid_response(*_args, **_kwargs):
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def read(self): return b'{not json'
+        return FakeResponse()
+
+    monkeypatch.setattr(money_app, "urlopen", invalid_response)
+    with money_app.app.test_client() as client:
+        data = client.get("/api/budget").get_json()
+        data["wageForecast"]["cycles"]["2026-07-23"] = {"weeks": [{"basicHours": 12}]}
+        client.put("/api/budget", json=data)
+        response = client.post("/api/wages/import-rota-preview", json={"payday": "2026-07-23"})
+        saved = client.get("/api/budget").get_json()
+
+    assert response.status_code == 502
+    assert saved["wageForecast"]["cycles"]["2026-07-23"]["weeks"][0]["basicHours"] == 12

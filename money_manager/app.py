@@ -8,15 +8,17 @@ import mimetypes
 import uuid
 from datetime import date
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from flask import Flask, abort, g, jsonify, render_template, request, send_file
-from core import default_sheets, wage_forecast_defaults
+from core import build_rota_preview, default_sheets, payroll_weeks, wage_forecast_defaults
 
 DB_PATH = Path(os.environ.get("MONEY_MANAGER_DB", "/config/money_manager.db"))
 ICON_CACHE_DIR = Path(os.environ.get("MONEY_MANAGER_ICON_CACHE", "/config/icon_cache"))
 ICON_FETCH_TIMEOUT = 10
+ROTA_IMPORTER_TIMEOUT = 10
+ROTA_IMPORTER_URL = os.environ.get("ROTA_IMPORTER_URL", "http://rota-importer:8098").rstrip("/")
 VERSION_PATH = Path(__file__).resolve().parent / "VERSION"
 NEXT_PAYDAY = "2026-07-23"
 
@@ -224,6 +226,34 @@ def put_budget():
     data = request.get_json(force=True)
     save_budget_data(data)
     return jsonify({"ok": True, "data": data})
+
+
+@app.post("/api/wages/import-rota-preview")
+def import_rota_preview():
+    payload = request.get_json(silent=True) or {}
+    payday = payload.get("payday")
+    try:
+        weeks = payroll_weeks(payday)
+    except (TypeError, ValueError):
+        return jsonify({"error": "A valid payday in YYYY-MM-DD format is required."}), 400
+    query = urlencode({"start_date": weeks[0]["start_date"], "end_date": weeks[-1]["end_date"]})
+    rota_request = Request(
+        f"{ROTA_IMPORTER_URL}/api/my-wage-shifts?{query}",
+        headers={"Accept": "application/json", "User-Agent": f"MoneyManager/{app_version()}"},
+    )
+    try:
+        with urlopen(rota_request, timeout=ROTA_IMPORTER_TIMEOUT) as response:
+            upstream = json.loads(response.read())
+    except (HTTPError, URLError, TimeoutError):
+        return jsonify({"error": "Rota Importer is unavailable. No wage data was changed."}), 502
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return jsonify({"error": "Rota Importer returned invalid data. No wage data was changed."}), 502
+    shifts = upstream.get("shifts") if isinstance(upstream, dict) else upstream
+    try:
+        preview = build_rota_preview(payday, shifts)
+    except ValueError as error:
+        return jsonify({"error": f"Rota Importer returned invalid data: {error}. No wage data was changed."}), 502
+    return jsonify(preview)
 
 
 @app.post("/api/budget/reset")
