@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 
@@ -193,6 +194,87 @@ def wage_forecast_defaults() -> dict[str, Any]:
         },
         "cycles": {},
     }
+
+
+def payroll_weeks(payday_value: str) -> list[dict[str, str]]:
+    """Return the four seven-day periods already used by the wage forecast UI."""
+    payday = date.fromisoformat(payday_value)
+    first_day = payday - timedelta(days=39)
+    return [{"start_date": (first_day + timedelta(days=i * 7)).isoformat(), "end_date": (first_day + timedelta(days=i * 7 + 6)).isoformat()} for i in range(4)]
+
+
+def _shift_datetime(shift: dict[str, Any], field: str, shift_date: date) -> datetime:
+    value = shift.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Shift is missing {field}")
+    value = value.strip()
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        try:
+            return datetime.combine(shift_date, time.fromisoformat(value))
+        except ValueError as error:
+            raise ValueError(f"Shift has invalid {field}") from error
+
+
+def _night_overlap_minutes(start: datetime, finish: datetime) -> int:
+    overlap = 0
+    day = start.date() - timedelta(days=1)
+    while day <= finish.date():
+        window_start = datetime.combine(day, time(22))
+        window_end = datetime.combine(day + timedelta(days=1), time(6))
+        overlap += max(0, int((min(finish, window_end) - max(start, window_start)).total_seconds() // 60))
+        day += timedelta(days=1)
+    return overlap
+
+
+def build_rota_preview(payday_value: str, shifts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Validate and group Rota Importer shifts using integer minutes only."""
+    weeks = payroll_weeks(payday_value)
+    range_start = date.fromisoformat(weeks[0]["start_date"])
+    range_end = date.fromisoformat(weeks[-1]["end_date"])
+    grouped = [{**week, "basic_minutes": 0, "night_minutes": 0} for week in weeks]
+    preview_shifts, source_ids = [], []
+    if not isinstance(shifts, list):
+        raise ValueError("Rota Importer response must contain a shifts list")
+    for raw in shifts:
+        if not isinstance(raw, dict):
+            raise ValueError("Rota Importer returned an invalid shift")
+        shift_id = raw.get("id", raw.get("shift_id"))
+        if shift_id is None:
+            raise ValueError("Rota Importer shift is missing an ID")
+        date_value = raw.get("date", raw.get("shift_date"))
+        try:
+            shift_date = date.fromisoformat(date_value)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Rota Importer shift has an invalid date") from error
+        if not range_start <= shift_date <= range_end:
+            raise ValueError("Rota Importer returned a shift outside the requested range")
+        shift_values = {**raw, "start": raw.get("start", raw.get("start_time")), "finish": raw.get("finish", raw.get("finish_time", raw.get("end_time")))}
+        start, finish = _shift_datetime(shift_values, "start", shift_date), _shift_datetime(shift_values, "finish", shift_date)
+        if finish <= start:
+            finish += timedelta(days=1)
+        gross_minutes = int((finish - start).total_seconds() // 60)
+        if gross_minutes <= 0 or gross_minutes > 1440:
+            raise ValueError("Rota Importer shift duration is invalid")
+        break_value = raw.get("unpaid_break_minutes", raw.get("break_minutes", 0))
+        if isinstance(break_value, bool) or not isinstance(break_value, (int, float)) or int(break_value) != break_value:
+            raise ValueError("Rota Importer shift has invalid unpaid break minutes")
+        break_minutes = int(break_value)
+        if break_minutes < 0 or break_minutes > gross_minutes:
+            raise ValueError("Rota Importer shift has invalid unpaid break minutes")
+        paid_minutes = gross_minutes - break_minutes
+        scheduled_night = _night_overlap_minutes(start, finish)
+        night_minutes = min(scheduled_night, paid_minutes)
+        warning = raw.get("warning") or ""
+        if break_minutes and scheduled_night:
+            warning = warning or "Break timing unavailable; assumed outside night-premium time."
+        week_index = (shift_date - range_start).days // 7
+        grouped[week_index]["basic_minutes"] += paid_minutes
+        grouped[week_index]["night_minutes"] += night_minutes
+        source_ids.append(shift_id)
+        preview_shifts.append({"id": shift_id, "date": shift_date.isoformat(), "start": start.strftime("%H:%M"), "finish": finish.strftime("%H:%M"), "gross_minutes": gross_minutes, "unpaid_break_minutes": break_minutes, "paid_minutes": paid_minutes, "night_minutes": night_minutes, "warning": warning})
+    return {"payday": payday_value, "requested_range": {"start_date": range_start.isoformat(), "end_date": range_end.isoformat()}, "weeks": grouped, "shifts": preview_shifts, "source_shift_ids": source_ids}
 
 
 def normalise_wage_week(week: dict[str, Any] | None, index: int = 0) -> dict[str, Any]:

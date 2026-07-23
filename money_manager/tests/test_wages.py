@@ -77,3 +77,30 @@ def test_empty_wage_weeks_default_to_39_basic_hours():
     assert len(weeks) == 4
     assert all(week["basicHours"] == 39 for week in weeks)
     assert all(week["basicMinutes"] == 0 for week in weeks)
+
+
+def test_rota_preview_groups_all_four_payroll_weeks():
+    shifts = [
+        {"id": f"shift-{index}", "date": day, "start": "09:00", "finish": "17:00", "break_minutes": 30}
+        for index, day in enumerate(["2026-06-14", "2026-06-21", "2026-06-28", "2026-07-05"])
+    ]
+
+    preview = money_core.build_rota_preview("2026-07-23", shifts)
+
+    assert preview["requested_range"] == {"start_date": "2026-06-14", "end_date": "2026-07-11"}
+    assert [week["basic_minutes"] for week in preview["weeks"]] == [450, 450, 450, 450]
+    assert [week["night_minutes"] for week in preview["weeks"]] == [0, 0, 0, 0]
+
+
+def test_rota_preview_handles_overnight_shift_and_additive_night_premium():
+    preview = money_core.build_rota_preview("2026-07-23", [
+        {"shift_id": 42, "shift_date": "2026-06-14", "start_time": "21:30", "finish_time": "06:30", "unpaid_break_minutes": 30}
+    ])
+
+    shift = preview["shifts"][0]
+    assert shift["gross_minutes"] == 540
+    assert shift["paid_minutes"] == 510
+    assert shift["night_minutes"] == 480
+    assert preview["weeks"][0]["basic_minutes"] == 510
+    assert preview["weeks"][0]["night_minutes"] == 480
+    assert shift["warning"]
