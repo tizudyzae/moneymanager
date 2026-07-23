@@ -599,7 +599,7 @@
       <div class="wage-grid">
         <div class="wage-card">
           <div class="validation-message" id="wageValidation" hidden></div>
-          <div class="wage-import-actions"><button class="primary" id="importRota">Import from Rota</button><button id="restoreRota" hidden>Restore pre-import values</button><span class="status" id="rotaStatus"></span></div>
+          <div class="wage-import-actions"><button class="primary" id="importRota">Import from Rota</button><button id="testRota">Test Rota Importer connection</button><button id="restoreRota" hidden>Restore pre-import values</button><span class="status" id="rotaStatus"></span></div>
         </div>
         <div class="wage-card wage-import-preview" id="rotaPreview" hidden></div>
         <div id="wageWeeks"></div>
@@ -1045,6 +1045,7 @@
   saveSettings.onclick = ()=>{ state.settings.paydays = paydaysInput.value.split(/\s+/).filter(Boolean).sort(); state.settings.dailyFoodAmount = parseMoney(dailyFoodAmount.value); state.settings.dailyPetrolAmount = parseMoney(dailyPetrolAmount.value); currentPayday = nearestPayday(); currentWagePayday = currentPayday; syncFutureRecurringPayments(); syncAutomaticPayments(); apiSave(); render(); };
   [wageHourlyRate,wagePayePercent,wageNiPercent,wageFixedDeductions].forEach(input=>input.onchange=e=>{ const map={wageHourlyRate:'hourlyRate',wagePayePercent:'payePercent',wageNiPercent:'niPercent',wageFixedDeductions:'fixedDeductions'}; const key=map[e.target.id]; state.wageForecast.settings[key] = key.includes('Percent') ? clampNumber(e.target.value,0,100) : clampNumber(e.target.value,0); apiSave(); renderWages(); updateSummary(); });
   importRota.onclick=requestRotaPreview;
+  testRota.onclick=async()=>{ testRota.disabled=true; rotaStatus.textContent='Testing Rota Importer connection…'; try{ const response=await fetch('api/wages/rota-status'); const status=await response.json(); rotaStatus.textContent=status.endpoint_reachable ? `Connected to ${status.resolved_hostname}:${status.port}.` : `Connection failed (${status.error || 'unavailable'}).`; }catch(error){ rotaStatus.textContent=`Connection test failed: ${error.message}`; }finally{ testRota.disabled=false; } };
   restoreRota.onclick=async()=>{ const cycle=ensureWageForecast(); const previous=cycle.rotaImport?.pre_import_values; if(!previous) return; previous.forEach((values,index)=>Object.assign(cycle.weeks[index], values)); delete cycle.rotaImport; rotaPreview.hidden=true; await apiSave(); renderWages(); };
   openSettings.onclick = ()=>{ setView('settings'); };
   document.querySelectorAll('.bottom-nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));

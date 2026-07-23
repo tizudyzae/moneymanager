@@ -5,8 +5,11 @@ from pathlib import Path
 import hashlib
 import json
 import mimetypes
+import logging
+import socket
 import uuid
 from datetime import date
+from time import monotonic
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -18,11 +21,94 @@ DB_PATH = Path(os.environ.get("MONEY_MANAGER_DB", "/config/money_manager.db"))
 ICON_CACHE_DIR = Path(os.environ.get("MONEY_MANAGER_ICON_CACHE", "/config/icon_cache"))
 ICON_FETCH_TIMEOUT = 10
 ROTA_IMPORTER_TIMEOUT = 10
-ROTA_IMPORTER_URL = os.environ.get("ROTA_IMPORTER_URL", "http://rota-importer:8098").rstrip("/")
+ROTA_ADDRESS_CACHE_SECONDS = 60
+SUPERVISOR_ADDONS_URL = "http://supervisor/addons"
+_rota_address_cache = None
 VERSION_PATH = Path(__file__).resolve().parent / "VERSION"
 NEXT_PAYDAY = "2026-07-23"
 
 app = Flask(__name__)
+logger = logging.getLogger(__name__)
+
+
+class RotaImporterError(Exception):
+    def __init__(self, category, message, attempted_url=None):
+        super().__init__(message)
+        self.category = category
+        self.attempted_url = attempted_url
+
+
+def configured_rota_importer_url():
+    explicit = os.environ.get("ROTA_IMPORTER_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    try:
+        options = json.loads(Path("/data/options.json").read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    return str(options.get("rota_importer_url", "")).strip().rstrip("/") or None
+
+
+def clear_rota_address_cache():
+    global _rota_address_cache
+    _rota_address_cache = None
+
+
+def discover_rota_importer(force=False):
+    global _rota_address_cache
+    explicit = configured_rota_importer_url()
+    if explicit:
+        parsed = urlparse(explicit)
+        return {"url": explicit, "hostname": parsed.hostname, "port": parsed.port, "override": True}
+    if not force and _rota_address_cache and monotonic() - _rota_address_cache[0] < ROTA_ADDRESS_CACHE_SECONDS:
+        return _rota_address_cache[1]
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        raise RotaImporterError("discovery", "SUPERVISOR_TOKEN is unavailable")
+    supervisor_request = Request(SUPERVISOR_ADDONS_URL, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
+    try:
+        with urlopen(supervisor_request, timeout=ROTA_IMPORTER_TIMEOUT) as response:
+            payload = json.loads(response.read())
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as error:
+        logger.error("Rota Importer discovery failed at %s: %s: %s", SUPERVISOR_ADDONS_URL, type(error).__name__, error)
+        raise RotaImporterError("discovery", f"{type(error).__name__}: {error}") from error
+    addons = payload.get("data", {}).get("addons", payload.get("addons", [])) if isinstance(payload, dict) else []
+    addon = next((item for item in addons if item.get("name") == "Rota PDF Importer" or item.get("slug", "") == "rota_importer" or item.get("slug", "").endswith("_rota_importer")), None)
+    if not addon or not addon.get("hostname") or addon.get("ingress_port") is None:
+        raise RotaImporterError("discovery", "Rota PDF Importer was not found in installed add-ons")
+    address = {"url": f"http://{addon['hostname']}:{int(addon['ingress_port'])}", "hostname": addon["hostname"], "port": int(addon["ingress_port"]), "override": False}
+    _rota_address_cache = (monotonic(), address)
+    return address
+
+
+def classify_upstream_error(error):
+    if isinstance(error, HTTPError): return "http_error"
+    if isinstance(error, (TimeoutError, socket.timeout)): return "timeout"
+    reason = error.reason if isinstance(error, URLError) else error
+    if isinstance(reason, socket.gaierror): return "dns_failure"
+    if isinstance(reason, ConnectionRefusedError): return "connection_refused"
+    return "connection_failure"
+
+
+def request_rota_shifts(start_date, end_date):
+    query = urlencode({"start_date": start_date, "end_date": end_date})
+    for attempt in range(2):
+        address = discover_rota_importer(force=attempt > 0)
+        attempted_url = f"{address['url']}/api/my-wage-shifts?{query}"
+        logger.info("Requesting Rota Importer URL: %s", attempted_url)
+        try:
+            with urlopen(Request(attempted_url, headers={"Accept": "application/json", "User-Agent": f"MoneyManager/{app_version()}"}), timeout=ROTA_IMPORTER_TIMEOUT) as response:
+                return json.loads(response.read()), address, attempted_url
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            logger.error("Rota Importer invalid JSON at %s: %s: %s", attempted_url, type(error).__name__, error)
+            raise RotaImporterError("invalid_json", f"{type(error).__name__}: {error}", attempted_url) from error
+        except (HTTPError, URLError, TimeoutError, socket.timeout, ConnectionError) as error:
+            category = classify_upstream_error(error)
+            logger.error("Rota Importer %s at %s: %s: %s", category, attempted_url, type(error).__name__, error)
+            if not address["override"] and attempt == 0:
+                clear_rota_address_cache()
+                continue
+            raise RotaImporterError(category, f"{type(error).__name__}: {error}", attempted_url) from error
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS cells (
@@ -236,24 +322,31 @@ def import_rota_preview():
         weeks = payroll_weeks(payday)
     except (TypeError, ValueError):
         return jsonify({"error": "A valid payday in YYYY-MM-DD format is required."}), 400
-    query = urlencode({"start_date": weeks[0]["start_date"], "end_date": weeks[-1]["end_date"]})
-    rota_request = Request(
-        f"{ROTA_IMPORTER_URL}/api/my-wage-shifts?{query}",
-        headers={"Accept": "application/json", "User-Agent": f"MoneyManager/{app_version()}"},
-    )
     try:
-        with urlopen(rota_request, timeout=ROTA_IMPORTER_TIMEOUT) as response:
-            upstream = json.loads(response.read())
-    except (HTTPError, URLError, TimeoutError):
-        return jsonify({"error": "Rota Importer is unavailable. No wage data was changed."}), 502
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return jsonify({"error": "Rota Importer returned invalid data. No wage data was changed."}), 502
+        upstream, _address, _attempted_url = request_rota_shifts(weeks[0]["start_date"], weeks[-1]["end_date"])
+    except RotaImporterError as error:
+        labels = {"dns_failure": "DNS lookup failed", "connection_refused": "connection was refused", "timeout": "request timed out", "http_error": "returned an HTTP error", "invalid_json": "returned invalid JSON", "discovery": "could not be discovered"}
+        return jsonify({"error": f"Rota Importer {labels.get(error.category, 'is unavailable')}. No wage data was changed.", "category": error.category}), 502
     shifts = upstream.get("shifts") if isinstance(upstream, dict) else upstream
     try:
         preview = build_rota_preview(payday, shifts)
     except ValueError as error:
+        logger.error("Rota Importer response from %s was invalid: %s: %s", _attempted_url, type(error).__name__, error)
         return jsonify({"error": f"Rota Importer returned invalid data: {error}. No wage data was changed."}), 502
     return jsonify(preview)
+
+
+@app.get("/api/wages/rota-status")
+def rota_status():
+    try:
+        today = date.today().isoformat()
+        _payload, address, _attempted_url = request_rota_shifts(today, today)
+        return jsonify({"available": True, "resolved_hostname": address["hostname"], "port": address["port"], "endpoint_reachable": True})
+    except RotaImporterError as error:
+        address = None
+        try: address = discover_rota_importer()
+        except RotaImporterError: pass
+        return jsonify({"available": bool(address), "resolved_hostname": address.get("hostname") if address else None, "port": address.get("port") if address else None, "endpoint_reachable": False, "error": error.category}), 200
 
 
 @app.post("/api/budget/reset")

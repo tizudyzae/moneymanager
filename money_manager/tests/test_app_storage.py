@@ -118,6 +118,7 @@ def test_icon_api_rejects_non_http_urls(tmp_path):
 
 def test_rota_preview_api_requests_exact_range_without_mutating_budget(tmp_path, monkeypatch):
     money_app.DB_PATH = tmp_path / "money_manager.db"
+    monkeypatch.setenv("ROTA_IMPORTER_URL", "http://explicit-rota:8099")
     requested = {}
 
     class FakeResponse:
@@ -144,6 +145,7 @@ def test_rota_preview_api_requests_exact_range_without_mutating_budget(tmp_path,
 
 def test_rota_preview_api_failure_does_not_modify_wage_cycle(tmp_path, monkeypatch):
     money_app.DB_PATH = tmp_path / "money_manager.db"
+    monkeypatch.setenv("ROTA_IMPORTER_URL", "http://explicit-rota:8099")
 
     def invalid_response(*_args, **_kwargs):
         class FakeResponse:
@@ -161,4 +163,69 @@ def test_rota_preview_api_failure_does_not_modify_wage_cycle(tmp_path, monkeypat
         saved = client.get("/api/budget").get_json()
 
     assert response.status_code == 502
+    assert response.get_json()["category"] == "invalid_json"
     assert saved["wageForecast"]["cycles"]["2026-07-23"]["weeks"][0]["basicHours"] == 12
+
+
+def test_supervisor_discovers_repository_prefixed_slug_hostname_and_port(monkeypatch):
+    monkeypatch.delenv("ROTA_IMPORTER_URL", raising=False)
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "secret-token")
+    money_app.clear_rota_address_cache()
+    seen = {}
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self):
+            return json.dumps({"data": {"addons": [{"name": "Something Else", "slug": "other"}, {"name": "Renamed", "slug": "local_ab12_rota_importer", "hostname": "local-ab12-rota-importer", "ingress_port": 8099}]}}).encode()
+
+    def fake_urlopen(request, timeout):
+        seen["url"] = request.full_url
+        seen["authorization"] = request.get_header("Authorization")
+        return Response()
+
+    monkeypatch.setattr(money_app, "urlopen", fake_urlopen)
+    address = money_app.discover_rota_importer()
+    assert seen == {"url": "http://supervisor/addons", "authorization": "Bearer secret-token"}
+    assert address == {"url": "http://local-ab12-rota-importer:8099", "hostname": "local-ab12-rota-importer", "port": 8099, "override": False}
+
+
+def test_supervisor_discovery_matches_addon_name(monkeypatch):
+    monkeypatch.delenv("ROTA_IMPORTER_URL", raising=False)
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "token")
+    money_app.clear_rota_address_cache()
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self): return json.dumps({"data": {"addons": [{"name": "Rota PDF Importer", "slug": "unexpected", "hostname": "actual-host", "ingress_port": 8123}]}}).encode()
+
+    monkeypatch.setattr(money_app, "urlopen", lambda *_args, **_kwargs: Response())
+    assert money_app.discover_rota_importer()["url"] == "http://actual-host:8123"
+
+
+def test_explicit_rota_url_override_skips_supervisor(monkeypatch):
+    monkeypatch.setenv("ROTA_IMPORTER_URL", "http://debug-host:9000/")
+    monkeypatch.setattr(money_app, "urlopen", lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Supervisor must not be called")))
+    assert money_app.discover_rota_importer() == {"url": "http://debug-host:9000", "hostname": "debug-host", "port": 9000, "override": True}
+
+
+def test_unreachable_rota_importer_reports_connection_refused(monkeypatch):
+    monkeypatch.setenv("ROTA_IMPORTER_URL", "http://debug-host:8099")
+
+    def refused(*_args, **_kwargs):
+        from urllib.error import URLError
+        raise URLError(ConnectionRefusedError(111, "Connection refused"))
+
+    monkeypatch.setattr(money_app, "urlopen", refused)
+    with money_app.app.test_client() as client:
+        response = client.post("/api/wages/import-rota-preview", json={"payday": "2026-07-23"})
+    assert response.status_code == 502
+    assert response.get_json()["category"] == "connection_refused"
+
+
+def test_rota_status_reports_safe_discovered_address(monkeypatch):
+    monkeypatch.setattr(money_app, "request_rota_shifts", lambda *_args: ({"shifts": []}, {"hostname": "repo-rota", "port": 8099}, "http://repo-rota:8099/api/my-wage-shifts"))
+    with money_app.app.test_client() as client:
+        response = client.get("/api/wages/rota-status")
+    assert response.get_json() == {"available": True, "resolved_hostname": "repo-rota", "port": 8099, "endpoint_reachable": True}
