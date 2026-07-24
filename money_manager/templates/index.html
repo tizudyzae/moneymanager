@@ -379,8 +379,9 @@
     .calendar-day:nth-child(7n){border-right:0}.calendar-day.outside{background:#f8fafc;color:#a4adbd}.calendar-day.today .day-number{background:var(--purple);color:white}
     .day-number{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px}
     .calendar-events{display:grid;gap:4px;margin-top:5px}.calendar-event{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:6px;padding:3px 5px;font-size:10px;font-weight:750}
-    .calendar-event.shift{background:#e7f8f1;color:#087d55}.calendar-event.payday{background:#eee9ff;color:#4f46d9}.calendar-event.payday.past{background:#edf1f5;color:#657188}
-    .calendar-day.cycle-week-1{box-shadow:inset 0 4px #fb923c}.calendar-day.cycle-week-2{box-shadow:inset 0 4px #818cf8}.calendar-day.cycle-week-3{box-shadow:inset 0 4px #34d399}.calendar-day.cycle-week-4{box-shadow:inset 0 4px #f472b6}
+    .calendar-event.shift{background:#e7f8f1;color:#087d55}.calendar-event.payday{border:0;width:100%;text-align:left;cursor:pointer}
+    .calendar-day.cycle-colour-1{box-shadow:inset 0 4px #fb923c;background:#fff7ed}.calendar-day.cycle-colour-2{box-shadow:inset 0 4px #818cf8;background:#f3f4ff}.calendar-day.cycle-colour-3{box-shadow:inset 0 4px #34d399;background:#effcf7}.calendar-day.cycle-colour-4{box-shadow:inset 0 4px #f472b6;background:#fff3f8}
+    .calendar-event.payday.cycle-colour-1{background:#fb923c;color:#431407}.calendar-event.payday.cycle-colour-2{background:#818cf8;color:#fff}.calendar-event.payday.cycle-colour-3{background:#34d399;color:#052e22}.calendar-event.payday.cycle-colour-4{background:#f472b6;color:#500724}
     .calendar-legend{display:flex;flex-wrap:wrap;gap:12px;padding:12px;color:var(--muted);font-size:12px}.calendar-legend span{display:flex;align-items:center;gap:5px}.legend-dot{width:10px;height:10px;border-radius:3px}
     label{display:grid;gap:8px;font-weight:800} label small{font-weight:500;color:var(--muted)} textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit}
     .wage-nav{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px}
@@ -617,9 +618,9 @@
       <div class="section-head"><div><h2>Work & payday calendar</h2><div class="wage-cycle-sub">Shifts, paydays and four-week pay cycles</div></div></div>
       <div class="calendar-shell">
         <div class="calendar-toolbar"><button id="calendarPrevious" aria-label="Previous calendar month">‹</button><strong id="calendarMonthLabel"></strong><button id="calendarNext" aria-label="Next calendar month">›</button></div>
-        <div class="calendar-weekdays" aria-hidden="true"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>
+        <div class="calendar-weekdays" aria-hidden="true"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
         <div class="calendar-grid" id="calendarList"></div>
-        <div class="calendar-legend"><span><i class="legend-dot" style="background:#fb923c"></i>Cycle week 1</span><span><i class="legend-dot" style="background:#818cf8"></i>Week 2</span><span><i class="legend-dot" style="background:#34d399"></i>Week 3</span><span><i class="legend-dot" style="background:#f472b6"></i>Week 4</span><span><i class="legend-dot" style="background:#10a56f"></i>Worked shift</span><span><i class="legend-dot" style="background:#5b5bf5"></i>Payday</span></div>
+        <div class="calendar-legend"><span><i class="legend-dot" style="background:#fb923c"></i>Pay cycle 1</span><span><i class="legend-dot" style="background:#818cf8"></i>Pay cycle 2</span><span><i class="legend-dot" style="background:#34d399"></i>Pay cycle 3</span><span><i class="legend-dot" style="background:#f472b6"></i>Pay cycle 4</span><span><i class="legend-dot" style="background:#10a56f"></i>Worked shift</span></div>
       </div>
     </section>
 
@@ -960,15 +961,17 @@
     const list = document.getElementById('calendarList'); list.innerHTML='';
     calendarMonthLabel.textContent=calendarCursor.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
     const monthStart=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth(),1);
-    const gridStart=addDays(monthStart,-((monthStart.getDay()+6)%7));
+    const gridStart=addDays(monthStart,-monthStart.getDay());
     const today=dateKey(new Date()); const paydays=new Set(sortedPaydays());
-    const cycles=sortedPaydays().map(payday=>({payday,start:addDays(parseLocalDate(payday),-39),end:addDays(parseLocalDate(payday),-12)}));
+    // Each four-week earning period gets one colour. Colours rotate between
+    // pay cycles; they no longer change at every calendar-week boundary.
+    const cycles=sortedPaydays().map((payday,index)=>({payday,start:addDays(parseLocalDate(payday),-39),end:addDays(parseLocalDate(payday),-12),colour:index%4+1}));
     const shiftsByDate={}; Object.values(state.wageForecast?.cycles || {}).forEach(cycle=>(cycle.rotaImport?.shifts || []).forEach(shift=>(shiftsByDate[shift.date] ||= []).push(shift)));
     for(let index=0;index<42;index++){
-      const day=addDays(gridStart,index); const key=dateKey(day); const cycle=cycles.find(item=>day>=item.start && day<=item.end); const week=cycle ? Math.floor((day-cycle.start)/604800000)+1 : 0;
-      const cell=document.createElement('div'); cell.className=`calendar-day${day.getMonth()!==calendarCursor.getMonth()?' outside':''}${key===today?' today':''}${week?` cycle-week-${week}`:''}`;
+      const day=addDays(gridStart,index); const key=dateKey(day); const cycle=cycles.find(item=>day>=item.start && day<=item.end); const paydayCycle=cycles.find(item=>item.payday===key); const cycleColour=cycle?.colour;
+      const cell=document.createElement('div'); cell.className=`calendar-day${day.getMonth()!==calendarCursor.getMonth()?' outside':''}${key===today?' today':''}${cycleColour?` cycle-colour-${cycleColour}`:''}`;
       const shiftEvents=(shiftsByDate[key] || []).map(shift=>`<div class="calendar-event shift" title="Worked ${escapeHtml(shift.start)}–${escapeHtml(shift.finish)}">● ${escapeHtml(shift.start)}–${escapeHtml(shift.finish)}</div>`).join('');
-      const paydayEvent=paydays.has(key) ? `<button class="calendar-event payday ${key<today?'past':'future'}" data-payday="${key}" title="Open ${paydayName(key)} overview">£ Payday</button>` : '';
+      const paydayEvent=paydays.has(key) ? `<button class="calendar-event payday cycle-colour-${paydayCycle.colour}" data-payday="${key}" title="Open ${paydayName(key)} overview">£ Payday</button>` : '';
       cell.innerHTML=`<div class="day-number">${day.getDate()}</div><div class="calendar-events">${paydayEvent}${shiftEvents}</div>`;
       cell.querySelector('[data-payday]')?.addEventListener('click',()=>{currentPayday=key;currentWagePayday=key;setView('overview');render();}); list.appendChild(cell);
     }
