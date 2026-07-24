@@ -31,8 +31,16 @@ def test_budget_api_persists_payday_data_and_recurring_payments(tmp_path):
         assert any(payment["id"] == "test-recurring" for payment in saved["recurringPayments"])
 
 
-def test_budget_defaults_and_migrates_to_july_2026_payday(tmp_path):
+def test_budget_defaults_and_migrates_to_july_2026_payday(tmp_path, monkeypatch):
     money_app.DB_PATH = tmp_path / "money_manager.db"
+    actual_date = money_app.date
+
+    class BeforePayday:
+        @staticmethod
+        def today():
+            return actual_date.fromisoformat("2026-07-22")
+
+    monkeypatch.setattr(money_app, "date", BeforePayday)
 
     with money_app.app.test_client() as client:
         data = client.get("/api/budget").get_json()
