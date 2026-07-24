@@ -272,7 +272,7 @@ def build_rota_preview(payday_value: str, shifts: list[dict[str, Any]]) -> dict[
         night_minutes = min(scheduled_night, paid_minutes)
         warning = raw.get("warning") or ""
         if break_minutes and scheduled_night:
-            warning = warning or "Break timing unavailable; assumed outside night-premium time."
+            warning = warning or "Break timing unavailable; assumed outside Time@3rd hours."
         week_index = (shift_date - range_start).days // 7
         grouped[week_index]["basic_minutes"] += paid_minutes
         grouped[week_index]["night_minutes"] += night_minutes
