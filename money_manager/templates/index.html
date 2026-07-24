@@ -384,7 +384,7 @@
     .wage-card.week-colour-4{background:#fdf2f8;border-color:#fbcfe8}
     .wage-results{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;color:var(--muted);font-size:13px}.wage-results strong{display:block;color:var(--text);font-size:16px;margin-top:3px}
     .wage-hours-summary{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px}.wage-hours-summary div{border:1px solid rgba(15,23,42,.08);border-radius:12px;background:rgba(255,255,255,.55);padding:10px;color:var(--muted);font-size:12px}.wage-hours-summary strong{display:block;margin-top:3px;color:var(--text);font-size:15px}
-    .week-detail-button{margin-top:12px}.week-shift-details{display:grid;gap:10px;margin-top:10px;overflow-x:auto}.shift-day{overflow:hidden;min-width:650px;border:1px solid rgba(15,23,42,.1);border-radius:12px;background:rgba(255,255,255,.68)}.shift-day h4{margin:0;padding:10px 12px;background:rgba(255,255,255,.7);font-size:14px}.shift-row,.shift-day-total{display:grid;grid-template-columns:minmax(120px,1.4fr) repeat(5,minmax(75px,1fr));gap:8px;padding:9px 12px;border-top:1px solid rgba(15,23,42,.08);align-items:center;font-size:12px}.shift-row span,.shift-day-total span{display:grid;gap:2px}.shift-row small,.shift-day-total small{color:var(--muted)}.shift-day-total{font-weight:850}.shift-empty{color:var(--muted);font-size:13px;text-align:center;padding:12px}
+    .week-detail-button{margin-top:12px}.week-shift-details{display:grid;gap:10px;margin-top:10px}.week-shift-details[hidden]{display:none}.shift-day{overflow:hidden;border:1px solid rgba(15,23,42,.1);border-radius:12px;background:rgba(255,255,255,.68)}.shift-day h4{margin:0;padding:10px 12px;background:rgba(255,255,255,.7);font-size:14px}.shift-row,.shift-day-total{display:grid;grid-template-columns:minmax(120px,1.4fr) repeat(5,minmax(75px,1fr));gap:8px;padding:9px 12px;border-top:1px solid rgba(15,23,42,.08);align-items:center;font-size:12px}.shift-row span,.shift-day-total span{display:grid;gap:2px;min-width:0}.shift-row small,.shift-day-total small{color:var(--muted)}.shift-day-total{font-weight:850}.shift-empty{color:var(--muted);font-size:13px;text-align:center;padding:12px}
     .wage-import-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.wage-import-actions .status{color:var(--muted);font-size:13px}
     .debug-log{max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#111827;color:#d1fae5;border-radius:12px;padding:12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
     .week-override{margin-top:12px}.week-override-fields[hidden]{display:none}
@@ -502,6 +502,14 @@
       .summary-label{font-size:11px}
       .summary-value{font-size:18px}
       .summary-sub{display:none}
+    }
+
+    @media (max-width:759px){
+      .wage-hours-summary{grid-template-columns:1fr}
+      .shift-row,.shift-day-total{grid-template-columns:1fr 1fr;gap:10px 16px;padding:12px}
+      .shift-row > span:first-child,.shift-day-total > span:first-child{grid-column:1/-1;padding-bottom:8px;border-bottom:1px solid rgba(15,23,42,.08)}
+      .shift-row span,.shift-day-total span{font-size:13px}
+      .shift-row small,.shift-day-total small{font-size:11px}
     }
   </style>
 </head>
@@ -1030,7 +1038,7 @@
         return `<div class="shift-row"><span><strong>${escapeHtml(shift.start)}–${escapeHtml(shift.finish)}</strong><small>${Number(shift.unpaid_break_minutes || 0)}m unpaid break</small></span><span><small>Basic</small>${shortTimeLabel(shift.paid_minutes)}</span><span><small>Time@3rd</small>${shortTimeLabel(shift.night_minutes)}</span><span><small>Basic pay</small>${formatMoney(basicPay)}</span><span><small>Time@3rd pay</small>${formatMoney(thirdPay)}</span><span><small>Shift total</small>${formatMoney(basicPay + thirdPay)}</span></div>`;
       }).join('');
       const dayLabel = parseLocalDate(dateValue).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'});
-      return `<section class="shift-day"><h4>${dayLabel}</h4>${rows}<div class="shift-day-total"><span>Day total</span><span>${shortTimeLabel(totals.paid)}</span><span>${shortTimeLabel(totals.third)}</span><span>${formatMoney(totals.basicPay)}</span><span>${formatMoney(totals.thirdPay)}</span><span>${formatMoney(totals.basicPay + totals.thirdPay)}</span></div></section>`;
+      return `<section class="shift-day"><h4>${dayLabel}</h4>${rows}<div class="shift-day-total"><span>Day total</span><span><small>Basic</small>${shortTimeLabel(totals.paid)}</span><span><small>Time@3rd</small>${shortTimeLabel(totals.third)}</span><span><small>Basic pay</small>${formatMoney(totals.basicPay)}</span><span><small>Time@3rd pay</small>${formatMoney(totals.thirdPay)}</span><span><small>Day pay</small>${formatMoney(totals.basicPay + totals.thirdPay)}</span></div></section>`;
     }).join('');
   }
 
@@ -1051,7 +1059,7 @@
       const importedBasic = importedWeek ? shortTimeLabel(importedWeek.basic_minutes) : 'Not imported';
       const importedThird = importedWeek ? shortTimeLabel(importedWeek.night_minutes) : 'Not imported';
       card.innerHTML = `<div class="wage-week-head" role="button" tabindex="0" aria-expanded="${expandedWageWeeks.has(index)}"><div><h3>Week ${weekNumber}</h3></div><div class="wage-week-actions"><div class="wage-week-total">${formatMoney(week.gross)}</div><span class="wage-week-toggle">⌄</span></div></div><div class="wage-week-body" ${expandedWageWeeks.has(index) ? '' : 'hidden'}><div class="wage-cycle-sub">w/c ${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} · ${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div><div class="wage-hours-summary"><div>Basic hours worked from rota<strong>${importedBasic}</strong></div><div>Time@3rd hours from rota<strong>${importedThird}</strong></div></div><button class="primary week-override" type="button">Override worked hours</button><div class="week-override-fields" ${editing ? '' : 'hidden'}><div class="wage-fields"><label class="wage-field"><span>Basic hours</span><input data-index="${index}" data-key="basicHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.basicHours}"></label><label class="wage-field"><span>Basic minutes</span><input data-index="${index}" data-key="basicMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.basicMinutes}"></label><label class="wage-field"><span>Time@3rd hours</span><input data-index="${index}" data-key="nightHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.nightHours}"></label><label class="wage-field"><span>Time@3rd minutes</span><input data-index="${index}" data-key="nightMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.nightMinutes}"></label></div></div><div class="wage-results"><div>Basic pay<strong>${formatMoney(week.basicPay)}</strong></div><div>Time@3rd<strong>${formatMoney(week.nightPremium)}</strong></div><div>Week gross<strong>${formatMoney(week.gross)}</strong></div></div><button class="week-detail-button" type="button" aria-expanded="${detailedWageWeeks.has(index)}">${detailedWageWeeks.has(index) ? 'Hide details' : 'Details'}</button><div class="week-shift-details" ${detailedWageWeeks.has(index) ? '' : 'hidden'}>${renderShiftDetails(importedShifts, clampNumber(settings.hourlyRate, 0))}</div></div>`;
-      const toggleWeek=()=>{ expandedWageWeeks.has(index) ? expandedWageWeeks.delete(index) : expandedWageWeeks.add(index); renderWages(); };
+      const toggleWeek=()=>{ if(expandedWageWeeks.has(index)){ expandedWageWeeks.delete(index); detailedWageWeeks.delete(index); }else{ expandedWageWeeks.add(index); } renderWages(); };
       card.querySelector('.wage-week-head').onclick=toggleWeek;
       card.querySelector('.wage-week-head').onkeydown=e=>{ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggleWeek(); } };
       card.querySelector('.week-override').onclick=()=>{ overriddenWageWeeks.add(index); cycle.overriddenWeeks ||= []; if(!cycle.overriddenWeeks.includes(index)) cycle.overriddenWeeks.push(index); apiSave(); renderWages(); };
