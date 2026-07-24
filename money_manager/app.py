@@ -8,7 +8,7 @@ import mimetypes
 import logging
 import socket
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from time import monotonic
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
@@ -24,6 +24,7 @@ ROTA_IMPORTER_TIMEOUT = 10
 ROTA_ADDRESS_CACHE_SECONDS = 60
 SUPERVISOR_ADDONS_URL = "http://supervisor/addons"
 _rota_address_cache = None
+_rota_debug_entries = []
 VERSION_PATH = Path(__file__).resolve().parent / "VERSION"
 NEXT_PAYDAY = "2026-07-23"
 
@@ -36,6 +37,12 @@ class RotaImporterError(Exception):
         super().__init__(message)
         self.category = category
         self.attempted_url = attempted_url
+
+
+def add_rota_debug(event, **details):
+    """Keep a small, secret-free in-memory trace for the Settings screen."""
+    _rota_debug_entries.append({"time": datetime.now(timezone.utc).isoformat(), "event": event, **details})
+    del _rota_debug_entries[:-50]
 
 
 def configured_rota_importer_url():
@@ -322,6 +329,7 @@ def import_rota_preview():
         weeks = payroll_weeks(payday)
     except (TypeError, ValueError):
         return jsonify({"error": "A valid payday in YYYY-MM-DD format is required."}), 400
+    add_rota_debug("preview_started", payday=payday, weeks=weeks)
     shifts = []
     attempted_urls = []
     try:
@@ -332,21 +340,48 @@ def import_rota_preview():
             upstream, _address, attempted_url = request_rota_shifts(week["start_date"], week["end_date"])
             attempted_urls.append(attempted_url)
             week_shifts = upstream.get("shifts") if isinstance(upstream, dict) else upstream
+            add_rota_debug(
+                "week_response",
+                payday=payday,
+                start_date=week["start_date"],
+                end_date=week["end_date"],
+                resolved_hostname=_address.get("hostname"),
+                port=_address.get("port"),
+                payload_type=type(upstream).__name__,
+                payload_keys=sorted(upstream.keys()) if isinstance(upstream, dict) else [],
+                shift_count=len(week_shifts) if isinstance(week_shifts, list) else None,
+                shift_fields=sorted(week_shifts[0].keys()) if isinstance(week_shifts, list) and week_shifts and isinstance(week_shifts[0], dict) else [],
+            )
             if not isinstance(week_shifts, list):
                 raise ValueError("Rota Importer response must contain a shifts list")
             shifts.extend(week_shifts)
     except RotaImporterError as error:
+        add_rota_debug("request_failed", payday=payday, category=error.category, detail=str(error))
         labels = {"dns_failure": "DNS lookup failed", "connection_refused": "connection was refused", "timeout": "request timed out", "http_error": "returned an HTTP error", "invalid_json": "returned invalid JSON", "discovery": "could not be discovered"}
         return jsonify({"error": f"Rota Importer {labels.get(error.category, 'is unavailable')}. No wage data was changed.", "category": error.category}), 502
     except ValueError as error:
+        add_rota_debug("response_invalid", payday=payday, detail=str(error))
         logger.error("Rota Importer response from %s was invalid: %s", attempted_urls[-1] if attempted_urls else "unknown URL", error)
         return jsonify({"error": f"Rota Importer returned invalid data: {error}. No wage data was changed."}), 502
     try:
         preview = build_rota_preview(payday, shifts)
     except ValueError as error:
+        add_rota_debug("preview_invalid", payday=payday, detail=str(error), shift_count=len(shifts))
         logger.error("Rota Importer response from %s was invalid: %s: %s", ", ".join(attempted_urls), type(error).__name__, error)
         return jsonify({"error": f"Rota Importer returned invalid data: {error}. No wage data was changed."}), 502
+    add_rota_debug("preview_ready", payday=payday, shift_count=len(shifts), weekly_shift_counts=[week["shift_count"] for week in preview["weeks"]])
     return jsonify(preview)
+
+
+@app.get("/api/wages/rota-debug")
+def rota_debug():
+    return jsonify({"entries": _rota_debug_entries})
+
+
+@app.delete("/api/wages/rota-debug")
+def clear_rota_debug():
+    _rota_debug_entries.clear()
+    return jsonify({"ok": True})
 
 
 @app.get("/api/wages/rota-status")

@@ -171,12 +171,28 @@ def test_rota_preview_api_collects_early_and_late_weeks_without_range_truncation
         return {"shifts": shifts_by_start[start_date]}, {"hostname": "rota", "port": 8099}, f"http://rota/shifts?start_date={start_date}&end_date={end_date}"
 
     monkeypatch.setattr(money_app, "request_rota_shifts", fake_request)
+    money_app._rota_debug_entries.clear()
     with money_app.app.test_client() as client:
         response = client.post("/api/wages/import-rota-preview", json={"payday": "2026-08-20"})
+        debug = client.get("/api/wages/rota-debug").get_json()["entries"]
 
     assert response.status_code == 200
     assert [week["shift_count"] for week in response.get_json()["weeks"]] == [1, 1, 1, 1]
     assert response.get_json()["source_shift_ids"] == ["week-40", "week-41", "week-42", "week-43"]
+    assert [entry["shift_count"] for entry in debug if entry["event"] == "week_response"] == [1, 1, 1, 1]
+    assert debug[-1]["weekly_shift_counts"] == [1, 1, 1, 1]
+    assert all("attempted_url" not in entry for entry in debug)
+
+
+def test_rota_debug_api_clears_entries():
+    money_app._rota_debug_entries[:] = [{"event": "test"}]
+
+    with money_app.app.test_client() as client:
+        response = client.delete("/api/wages/rota-debug")
+        saved = client.get("/api/wages/rota-debug").get_json()
+
+    assert response.status_code == 200
+    assert saved == {"entries": []}
 
 
 def test_rota_preview_api_failure_does_not_modify_wage_cycle(tmp_path, monkeypatch):
