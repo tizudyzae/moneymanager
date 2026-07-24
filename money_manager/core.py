@@ -197,7 +197,7 @@ def wage_forecast_defaults() -> dict[str, Any]:
 
 
 def payroll_weeks(payday_value: str) -> list[dict[str, str]]:
-    """Return the four seven-day periods already used by the wage forecast UI."""
+    """Return the four seven-day periods used by the wage forecast UI."""
     payday = date.fromisoformat(payday_value)
     first_day = payday - timedelta(days=39)
     return [{"start_date": (first_day + timedelta(days=i * 7)).isoformat(), "end_date": (first_day + timedelta(days=i * 7 + 6)).isoformat()} for i in range(4)]

@@ -31,8 +31,16 @@ def test_budget_api_persists_payday_data_and_recurring_payments(tmp_path):
         assert any(payment["id"] == "test-recurring" for payment in saved["recurringPayments"])
 
 
-def test_budget_defaults_and_migrates_to_july_2026_payday(tmp_path):
+def test_budget_defaults_and_migrates_to_july_2026_payday(tmp_path, monkeypatch):
     money_app.DB_PATH = tmp_path / "money_manager.db"
+    actual_date = money_app.date
+
+    class BeforePayday:
+        @staticmethod
+        def today():
+            return actual_date.fromisoformat("2026-07-22")
+
+    monkeypatch.setattr(money_app, "date", BeforePayday)
 
     with money_app.app.test_client() as client:
         data = client.get("/api/budget").get_json()
@@ -119,17 +127,18 @@ def test_icon_api_rejects_non_http_urls(tmp_path):
 def test_rota_preview_api_requests_exact_range_without_mutating_budget(tmp_path, monkeypatch):
     money_app.DB_PATH = tmp_path / "money_manager.db"
     monkeypatch.setenv("ROTA_IMPORTER_URL", "http://explicit-rota:8099")
-    requested = {}
+    requested = []
 
     class FakeResponse:
+        def __init__(self, shifts): self.shifts = shifts
         def __enter__(self): return self
         def __exit__(self, *_args): return False
-        def read(self):
-            return json.dumps({"shifts": [{"id": "one", "date": "2026-06-14", "start": "22:00", "finish": "06:00", "break_minutes": 0}]}).encode()
+        def read(self): return json.dumps({"shifts": self.shifts}).encode()
 
     def fake_urlopen(request, timeout):
-        requested["url"], requested["timeout"] = request.full_url, timeout
-        return FakeResponse()
+        requested.append(request.full_url)
+        shifts = [{"id": "one", "date": "2026-06-14", "start": "22:00", "finish": "06:00", "break_minutes": 0}] if "start_date=2026-06-14" in request.full_url else []
+        return FakeResponse(shifts)
 
     monkeypatch.setattr(money_app, "urlopen", fake_urlopen)
     with money_app.app.test_client() as client:
@@ -138,9 +147,52 @@ def test_rota_preview_api_requests_exact_range_without_mutating_budget(tmp_path,
         after = client.get("/api/budget").get_json()
 
     assert response.status_code == 200
-    assert "start_date=2026-06-14&end_date=2026-07-11" in requested["url"]
+    assert [url.split("?", 1)[1] for url in requested] == [
+        "start_date=2026-06-14&end_date=2026-06-20",
+        "start_date=2026-06-21&end_date=2026-06-27",
+        "start_date=2026-06-28&end_date=2026-07-04",
+        "start_date=2026-07-05&end_date=2026-07-11",
+    ]
     assert response.get_json()["weeks"][0]["night_minutes"] == 480
     assert before == after
+
+
+def test_rota_preview_api_collects_early_and_late_weeks_without_range_truncation(tmp_path, monkeypatch):
+    money_app.DB_PATH = tmp_path / "money_manager.db"
+    monkeypatch.setenv("ROTA_IMPORTER_URL", "http://explicit-rota:8099")
+    shifts_by_start = {
+        "2026-07-12": [{"id": "week-40", "date": "2026-07-12", "start": "09:00", "finish": "17:00"}],
+        "2026-07-19": [{"id": "week-41", "date": "2026-07-19", "start": "09:00", "finish": "17:00"}],
+        "2026-07-26": [{"id": "week-42", "date": "2026-07-26", "start": "09:00", "finish": "17:00"}],
+        "2026-08-02": [{"id": "week-43", "date": "2026-08-02", "start": "09:00", "finish": "17:00"}],
+    }
+
+    def fake_request(start_date, end_date):
+        return {"shifts": shifts_by_start[start_date]}, {"hostname": "rota", "port": 8099}, f"http://rota/shifts?start_date={start_date}&end_date={end_date}"
+
+    monkeypatch.setattr(money_app, "request_rota_shifts", fake_request)
+    money_app._rota_debug_entries.clear()
+    with money_app.app.test_client() as client:
+        response = client.post("/api/wages/import-rota-preview", json={"payday": "2026-08-20"})
+        debug = client.get("/api/wages/rota-debug").get_json()["entries"]
+
+    assert response.status_code == 200
+    assert [week["shift_count"] for week in response.get_json()["weeks"]] == [1, 1, 1, 1]
+    assert response.get_json()["source_shift_ids"] == ["week-40", "week-41", "week-42", "week-43"]
+    assert [entry["shift_count"] for entry in debug if entry["event"] == "week_response"] == [1, 1, 1, 1]
+    assert debug[-1]["weekly_shift_counts"] == [1, 1, 1, 1]
+    assert all("attempted_url" not in entry for entry in debug)
+
+
+def test_rota_debug_api_clears_entries():
+    money_app._rota_debug_entries[:] = [{"event": "test"}]
+
+    with money_app.app.test_client() as client:
+        response = client.delete("/api/wages/rota-debug")
+        saved = client.get("/api/wages/rota-debug").get_json()
+
+    assert response.status_code == 200
+    assert saved == {"entries": []}
 
 
 def test_rota_preview_api_failure_does_not_modify_wage_cycle(tmp_path, monkeypatch):
