@@ -79,6 +79,14 @@ def test_empty_wage_weeks_default_to_39_basic_hours():
     assert all(week["basicMinutes"] == 0 for week in weeks)
 
 
+def test_payroll_weeks_follow_the_four_week_payday_cycles():
+    july = money_core.payroll_weeks("2026-07-23")
+    august = money_core.payroll_weeks("2026-08-20")
+
+    assert [week["start_date"] for week in july] == ["2026-06-14", "2026-06-21", "2026-06-28", "2026-07-05"]
+    assert [week["start_date"] for week in august] == ["2026-07-12", "2026-07-19", "2026-07-26", "2026-08-02"]
+
+
 def test_rota_preview_groups_all_four_payroll_weeks():
     shifts = [
         {"id": f"shift-{index}", "date": day, "start": "09:00", "finish": "17:00", "break_minutes": 30}

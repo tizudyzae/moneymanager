@@ -322,16 +322,29 @@ def import_rota_preview():
         weeks = payroll_weeks(payday)
     except (TypeError, ValueError):
         return jsonify({"error": "A valid payday in YYYY-MM-DD format is required."}), 400
+    shifts = []
+    attempted_urls = []
     try:
-        upstream, _address, _attempted_url = request_rota_shifts(weeks[0]["start_date"], weeks[-1]["end_date"])
+        # Query each week separately. The Rota Importer can cap a broad date
+        # range to its newest results, which made the later weeks visible while
+        # silently omitting weeks 40 and 41 from a four-week request.
+        for week in weeks:
+            upstream, _address, attempted_url = request_rota_shifts(week["start_date"], week["end_date"])
+            attempted_urls.append(attempted_url)
+            week_shifts = upstream.get("shifts") if isinstance(upstream, dict) else upstream
+            if not isinstance(week_shifts, list):
+                raise ValueError("Rota Importer response must contain a shifts list")
+            shifts.extend(week_shifts)
     except RotaImporterError as error:
         labels = {"dns_failure": "DNS lookup failed", "connection_refused": "connection was refused", "timeout": "request timed out", "http_error": "returned an HTTP error", "invalid_json": "returned invalid JSON", "discovery": "could not be discovered"}
         return jsonify({"error": f"Rota Importer {labels.get(error.category, 'is unavailable')}. No wage data was changed.", "category": error.category}), 502
-    shifts = upstream.get("shifts") if isinstance(upstream, dict) else upstream
+    except ValueError as error:
+        logger.error("Rota Importer response from %s was invalid: %s", attempted_urls[-1] if attempted_urls else "unknown URL", error)
+        return jsonify({"error": f"Rota Importer returned invalid data: {error}. No wage data was changed."}), 502
     try:
         preview = build_rota_preview(payday, shifts)
     except ValueError as error:
-        logger.error("Rota Importer response from %s was invalid: %s: %s", _attempted_url, type(error).__name__, error)
+        logger.error("Rota Importer response from %s was invalid: %s: %s", ", ".join(attempted_urls), type(error).__name__, error)
         return jsonify({"error": f"Rota Importer returned invalid data: {error}. No wage data was changed."}), 502
     return jsonify(preview)
 
