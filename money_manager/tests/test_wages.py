@@ -90,6 +90,7 @@ def test_rota_preview_groups_all_four_payroll_weeks():
     assert preview["requested_range"] == {"start_date": "2026-06-14", "end_date": "2026-07-11"}
     assert [week["basic_minutes"] for week in preview["weeks"]] == [450, 450, 450, 450]
     assert [week["night_minutes"] for week in preview["weeks"]] == [0, 0, 0, 0]
+    assert [week["shift_count"] for week in preview["weeks"]] == [1, 1, 1, 1]
 
 
 def test_rota_preview_handles_overnight_shift_and_additive_night_premium():

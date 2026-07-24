@@ -233,7 +233,7 @@ def build_rota_preview(payday_value: str, shifts: list[dict[str, Any]]) -> dict[
     weeks = payroll_weeks(payday_value)
     range_start = date.fromisoformat(weeks[0]["start_date"])
     range_end = date.fromisoformat(weeks[-1]["end_date"])
-    grouped = [{**week, "basic_minutes": 0, "night_minutes": 0} for week in weeks]
+    grouped = [{**week, "basic_minutes": 0, "night_minutes": 0, "shift_count": 0} for week in weeks]
     preview_shifts, source_ids = [], []
     if not isinstance(shifts, list):
         raise ValueError("Rota Importer response must contain a shifts list")
@@ -276,6 +276,7 @@ def build_rota_preview(payday_value: str, shifts: list[dict[str, Any]]) -> dict[
         week_index = (shift_date - range_start).days // 7
         grouped[week_index]["basic_minutes"] += paid_minutes
         grouped[week_index]["night_minutes"] += night_minutes
+        grouped[week_index]["shift_count"] += 1
         source_ids.append(shift_id)
         preview_shifts.append({"id": shift_id, "date": shift_date.isoformat(), "start": start.strftime("%H:%M"), "finish": finish.strftime("%H:%M"), "gross_minutes": gross_minutes, "unpaid_break_minutes": break_minutes, "paid_minutes": paid_minutes, "night_minutes": night_minutes, "warning": warning})
     return {"payday": payday_value, "requested_range": {"start_date": range_start.isoformat(), "end_date": range_end.isoformat()}, "weeks": grouped, "shifts": preview_shifts, "source_shift_ids": source_ids}
