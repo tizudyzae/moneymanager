@@ -378,7 +378,8 @@
     .calendar-day{position:relative;min-height:112px;padding:8px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:#fff}
     .calendar-day:nth-child(7n){border-right:0}.calendar-day.outside{background:#f8fafc;color:#a4adbd}.calendar-day.today .day-number{background:var(--purple);color:white}
     .day-number{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px}
-    .calendar-events{display:grid;gap:4px;margin-top:5px}.calendar-event{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-radius:6px;padding:3px 5px;font-size:10px;font-weight:750}
+    .calendar-events{display:grid;gap:4px;margin-top:5px}.calendar-event{min-width:0;white-space:normal;overflow-wrap:anywhere;border-radius:6px;padding:4px 5px;font-size:10px;font-weight:750;line-height:1.25}
+    .calendar-event.shift{display:flex;align-items:center;gap:2px}.shift-time{white-space:nowrap}
     .calendar-event.shift{background:#e7f8f1;color:#087d55}.calendar-event.payday{border:0;width:100%;text-align:left;cursor:pointer}
     .calendar-day.cycle-colour-1{box-shadow:inset 0 4px #fb923c;background:#fff7ed}.calendar-day.cycle-colour-2{box-shadow:inset 0 4px #818cf8;background:#f3f4ff}.calendar-day.cycle-colour-3{box-shadow:inset 0 4px #34d399;background:#effcf7}.calendar-day.cycle-colour-4{box-shadow:inset 0 4px #f472b6;background:#fff3f8}
     .calendar-event.payday.cycle-colour-1{background:#fb923c;color:#431407}.calendar-event.payday.cycle-colour-2{background:#818cf8;color:#fff}.calendar-event.payday.cycle-colour-3{background:#34d399;color:#052e22}.calendar-event.payday.cycle-colour-4{background:#f472b6;color:#500724}
@@ -520,7 +521,7 @@
       .summary-label{font-size:11px}
       .summary-value{font-size:18px}
       .summary-sub{display:none}
-      .payment-tools{grid-template-columns:1fr}.calendar-day{min-height:82px;padding:5px}.calendar-event{padding:2px 3px;font-size:9px}.calendar-weekdays div{font-size:10px}
+      .payment-tools{grid-template-columns:1fr}.calendar-day{min-height:104px;padding:5px 4px}.calendar-event{padding:4px 3px;font-size:9px;text-align:center}.calendar-event.shift{flex-direction:column;gap:0}.shift-separator{height:3px;overflow:hidden}.calendar-event.payday{text-align:center}.calendar-weekdays div{font-size:10px}
     }
 
     @media (max-width:759px){
@@ -970,7 +971,7 @@
     for(let index=0;index<42;index++){
       const day=addDays(gridStart,index); const key=dateKey(day); const cycle=cycles.find(item=>day>=item.start && day<=item.end); const paydayCycle=cycles.find(item=>item.payday===key); const cycleColour=cycle?.colour;
       const cell=document.createElement('div'); cell.className=`calendar-day${day.getMonth()!==calendarCursor.getMonth()?' outside':''}${key===today?' today':''}${cycleColour?` cycle-colour-${cycleColour}`:''}`;
-      const shiftEvents=(shiftsByDate[key] || []).map(shift=>`<div class="calendar-event shift" title="Worked ${escapeHtml(shift.start)}–${escapeHtml(shift.finish)}">● ${escapeHtml(shift.start)}–${escapeHtml(shift.finish)}</div>`).join('');
+      const shiftEvents=(shiftsByDate[key] || []).map(shift=>`<div class="calendar-event shift" title="Worked ${escapeHtml(shift.start)}–${escapeHtml(shift.finish)}"><span aria-hidden="true">●</span><span class="shift-time">${escapeHtml(shift.start)}</span><span class="shift-separator">–</span><span class="shift-time">${escapeHtml(shift.finish)}</span></div>`).join('');
       const paydayEvent=paydays.has(key) ? `<button class="calendar-event payday cycle-colour-${paydayCycle.colour}" data-payday="${key}" title="Open ${paydayName(key)} overview">£ Payday</button>` : '';
       cell.innerHTML=`<div class="day-number">${day.getDate()}</div><div class="calendar-events">${paydayEvent}${shiftEvents}</div>`;
       cell.querySelector('[data-payday]')?.addEventListener('click',()=>{currentPayday=key;currentWagePayday=key;setView('overview');render();}); list.appendChild(cell);
