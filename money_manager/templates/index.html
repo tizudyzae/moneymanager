@@ -1054,8 +1054,14 @@
     if(openingWages) requestRotaPreview(null, true);
   }
 
-  prevMonth.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.max(0,i-1)] || currentPayday; currentWagePayday=currentPayday; render(); };
-  nextMonth.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.min(p.length-1,i+1)] || currentPayday; currentWagePayday=currentPayday; render(); };
+  function navigatePayday(offset){
+    const paydays=sortedPaydays(); const index=paydays.indexOf(currentPayday); const nextIndex=Math.max(0,Math.min(paydays.length-1,index+offset)); const nextPayday=paydays[nextIndex];
+    if(!nextPayday || nextPayday === currentPayday) return;
+    currentPayday=nextPayday; currentWagePayday=currentPayday; availableRotaPreview=null; render();
+    if(activeView === 'wages') requestRotaPreview(null, true);
+  }
+  prevMonth.onclick = ()=>navigatePayday(-1);
+  nextMonth.onclick = ()=>navigatePayday(1);
   document.querySelectorAll('.filter-tabs button').forEach(button=>{ button.onclick=()=>{ activeFilter=button.dataset.filter; document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active')); button.classList.add('active'); renderPayments(); }; });
   topAddPayment.onclick = ()=>{ addPanel.classList.toggle('open'); if(addPanel.classList.contains('open')) newName.focus(); };
   addPayment.onclick = ()=>{ const data=ensurePayday(); const name=newName.value.trim(); if(!name) return; data.payments.push({id:crypto.randomUUID?.() || String(Date.now()), name, amount:Number(newAmount.value||0), day:Math.max(1,Math.min(31,Number(newDay.value||1))), paid:false}); newName.value=newAmount.value=newDay.value=''; addPanel.classList.remove('open'); apiSave(); render(); };
