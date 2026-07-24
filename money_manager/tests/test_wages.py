@@ -33,7 +33,7 @@ def test_default_sheet_matches_visible_july_left_to_pay():
     assert round(sheet["pre_paid"]["jul"], 2) == 182.07
 
 
-def test_wage_forecast_uses_four_weeks_and_night_premium_formula():
+def test_wage_forecast_uses_four_weeks_and_time_at_third_formula():
     weeks = [
         {"basicHours": 40, "basicMinutes": 0, "nightHours": 6, "nightMinutes": 0},
         {"basicHours": 38, "basicMinutes": 30, "nightHours": 3, "nightMinutes": 30},
@@ -101,7 +101,7 @@ def test_rota_preview_groups_all_four_payroll_weeks():
     assert [week["shift_count"] for week in preview["weeks"]] == [1, 1, 1, 1]
 
 
-def test_rota_preview_handles_overnight_shift_and_additive_night_premium():
+def test_rota_preview_handles_overnight_shift_and_additive_time_at_third():
     preview = money_core.build_rota_preview("2026-07-23", [
         {"shift_id": 42, "shift_date": "2026-06-14", "start_time": "21:30", "finish_time": "06:30", "unpaid_break_minutes": 30}
     ])
