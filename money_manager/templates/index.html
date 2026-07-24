@@ -370,8 +370,9 @@
     .wage-cycle-title{font-size:17px;font-weight:900;text-align:center}
     .wage-cycle-sub{margin-top:4px;color:var(--muted);font-size:13px;text-align:center}
     .wage-settings{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-    .wage-week-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+    .wage-week-head{display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer}
     .wage-week-head h3{margin:0;font-size:17px}.wage-week-total{font-weight:900;color:var(--green)}
+    .wage-week-body{margin-top:12px}.wage-week-actions{display:flex;align-items:center;gap:8px}.wage-week-toggle{color:var(--muted);font-size:18px}.wage-card.expanded .wage-week-toggle{transform:rotate(180deg)}
     .wage-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
     .wage-field{display:grid;gap:6px;font-weight:800;color:var(--text)}
     .wage-field span{font-size:12px;color:var(--muted)}
@@ -599,7 +600,7 @@
       <div class="wage-grid">
         <div class="wage-card">
           <div class="validation-message" id="wageValidation" hidden></div>
-          <div class="wage-import-actions"><button class="primary" id="importRota">Import from Rota</button><button id="testRota">Test Rota Importer connection</button><button id="restoreRota" hidden>Restore pre-import values</button><span class="status" id="rotaStatus"></span></div>
+          <div class="wage-import-actions"><button id="testRota">Test Rota Importer connection</button><button id="restoreRota" hidden>Restore pre-import values</button><span class="status" id="rotaStatus"></span></div>
         </div>
         <div class="wage-card wage-import-preview" id="rotaPreview" hidden></div>
         <div id="wageWeeks"></div>
@@ -932,33 +933,39 @@
     return Math.round(clampNumber(week[`${prefix}Hours`], 0) * 60) + clampMinutes(week[`${prefix}Minutes`]);
   }
 
-  async function requestRotaPreview(){
+  let availableRotaPreview = null;
+  const expandedWageWeeks = new Set();
+
+  async function requestRotaPreview(weekIndex = null, automatic = false){
     const payday = currentWagePayday;
-    importRota.disabled = true; rotaStatus.textContent = 'Contacting Rota Importer…'; rotaPreview.hidden = true;
+    rotaStatus.textContent = 'Checking Rota Importer…'; rotaPreview.hidden = true;
     try{
       const response = await fetch('api/wages/import-rota-preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({payday})});
       const preview = await response.json();
       if(!response.ok) throw new Error(preview.error || 'Rota import failed.');
       if(currentWagePayday !== payday) return;
-      renderRotaPreview(preview);
-      rotaStatus.textContent = `${preview.shifts.length} shift${preview.shifts.length === 1 ? '' : 's'} ready to review.`;
-    }catch(error){ rotaStatus.textContent = error.message; }
-    finally{ importRota.disabled = false; }
+      availableRotaPreview = preview;
+      renderWages();
+      rotaStatus.textContent = preview.shifts.length ? `${preview.shifts.length} rota shift${preview.shifts.length === 1 ? '' : 's'} available.` : 'No rota data found for these weeks.';
+      if(weekIndex !== null) renderRotaPreview(preview, weekIndex);
+    }catch(error){ availableRotaPreview = null; renderWages(); rotaStatus.textContent = automatic ? `Rota check unavailable: ${error.message}` : error.message; }
   }
 
-  function renderRotaPreview(preview){
+  function renderRotaPreview(preview, selectedWeek){
     const cycle = ensureWageForecast();
     const comparison = preview.weeks.map((week,index)=>{
+      if(index !== selectedWeek) return '';
       const manual = cycle.weeks[index];
-      return `<div class="import-week"><strong>Week ${index+1}</strong><span>Current: ${escapeHtml(minutesLabel(weekMinutes(manual,'basic')))} basic · ${escapeHtml(minutesLabel(weekMinutes(manual,'night')))} night</span><span>Imported: ${escapeHtml(minutesLabel(week.basic_minutes))} basic · ${escapeHtml(minutesLabel(week.night_minutes))} night</span></div>`;
+      return `<div class="import-week"><strong>Selected week</strong><span>Current: ${escapeHtml(minutesLabel(weekMinutes(manual,'basic')))} basic · ${escapeHtml(minutesLabel(weekMinutes(manual,'night')))} night</span><span>Imported: ${escapeHtml(minutesLabel(week.basic_minutes))} basic · ${escapeHtml(minutesLabel(week.night_minutes))} night</span></div>`;
     }).join('');
-    const shifts = preview.shifts.map(shift=>`<tr><td>${escapeHtml(shift.date)}</td><td>${escapeHtml(shift.start)}–${escapeHtml(shift.finish)}</td><td>${escapeHtml(minutesLabel(shift.gross_minutes))}</td><td>${escapeHtml(minutesLabel(shift.unpaid_break_minutes))}</td><td>${escapeHtml(minutesLabel(shift.paid_minutes))}</td><td>${escapeHtml(minutesLabel(shift.night_minutes))}</td><td class="import-warning">${escapeHtml(shift.warning || '—')}</td></tr>`).join('');
-    rotaPreview.innerHTML = `<h3>Rota import preview</h3><p>${escapeHtml(preview.requested_range.start_date)} to ${escapeHtml(preview.requested_range.end_date)}. Saved data has not changed.</p><div class="import-comparison">${comparison}</div><div class="shift-table-wrap"><table class="shift-table"><thead><tr><th>Date</th><th>Start–finish</th><th>Gross</th><th>Unpaid break</th><th>Paid</th><th>Night premium</th><th>Warning</th></tr></thead><tbody>${shifts || '<tr><td colspan="7">No shifts returned.</td></tr>'}</tbody></table></div><div class="wage-import-actions"><button class="primary" id="applyRotaPreview">Apply Import</button><button id="cancelRotaPreview">Cancel</button></div>`;
+    const selected = preview.weeks[selectedWeek];
+    const shifts = preview.shifts.filter(shift=>shift.date >= selected.start_date && shift.date <= selected.end_date).map(shift=>`<tr><td>${escapeHtml(shift.date)}</td><td>${escapeHtml(shift.start)}–${escapeHtml(shift.finish)}</td><td>${escapeHtml(minutesLabel(shift.gross_minutes))}</td><td>${escapeHtml(minutesLabel(shift.unpaid_break_minutes))}</td><td>${escapeHtml(minutesLabel(shift.paid_minutes))}</td><td>${escapeHtml(minutesLabel(shift.night_minutes))}</td><td class="import-warning">${escapeHtml(shift.warning || '—')}</td></tr>`).join('');
+    rotaPreview.innerHTML = `<h3>Rota import preview</h3><p>${escapeHtml(selected.start_date)} to ${escapeHtml(selected.end_date)}. Saved data has not changed.</p><div class="import-comparison">${comparison}</div><div class="shift-table-wrap"><table class="shift-table"><thead><tr><th>Date</th><th>Start–finish</th><th>Gross</th><th>Unpaid break</th><th>Paid</th><th>Night premium</th><th>Warning</th></tr></thead><tbody>${shifts}</tbody></table></div><div class="wage-import-actions"><button class="primary" id="applyRotaPreview">Apply this week</button><button id="cancelRotaPreview">Cancel</button></div>`;
     rotaPreview.hidden = false;
     rotaPreview.querySelector('#cancelRotaPreview').onclick=()=>{ rotaPreview.hidden=true; rotaPreview.innerHTML=''; rotaStatus.textContent='Import cancelled; saved values were not changed.'; };
     rotaPreview.querySelector('#applyRotaPreview').onclick=async()=>{
       const preImportValues = cycle.weeks.map(week=>({basicHours:week.basicHours,basicMinutes:week.basicMinutes,nightHours:week.nightHours,nightMinutes:week.nightMinutes}));
-      preview.weeks.forEach((week,index)=>{ const basic=divmodMinutes(week.basic_minutes), night=divmodMinutes(week.night_minutes); Object.assign(cycle.weeks[index], {basicHours:basic.hours,basicMinutes:basic.minutes,nightHours:night.hours,nightMinutes:night.minutes}); });
+      const week = preview.weeks[selectedWeek], basic=divmodMinutes(week.basic_minutes), night=divmodMinutes(week.night_minutes); Object.assign(cycle.weeks[selectedWeek], {basicHours:basic.hours,basicMinutes:basic.minutes,nightHours:night.hours,nightMinutes:night.minutes});
       cycle.rotaImport = {imported_at:new Date().toISOString(), requested_date_range:preview.requested_range, source_shift_ids:preview.source_shift_ids, manually_edited_after_import:false, pre_import_values:preImportValues};
       await apiSave(); rotaPreview.hidden=true; rotaPreview.innerHTML=''; renderWages();
     };
@@ -1008,14 +1015,23 @@
     wageCycleTitle.textContent = `${paydayName(currentWagePayday)} payday`;
     wageCycleTitle.nextElementSibling.textContent = `${start.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${payday.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
     wageHourlyRate.value = Number(settings.hourlyRate || 0).toFixed(2); wagePayePercent.value = Number(settings.payePercent || 0); wageNiPercent.value = Number(settings.niPercent || 0); wageFixedDeductions.value = Number(settings.fixedDeductions || 0).toFixed(2);
-    const imported = cycle.rotaImport; restoreRota.hidden = !imported?.pre_import_values; importRota.textContent = imported ? 'Re-import from Rota' : 'Import from Rota';
+    const imported = cycle.rotaImport; restoreRota.hidden = !imported?.pre_import_values;
     rotaStatus.textContent = imported ? `Imported ${new Date(imported.imported_at).toLocaleString('en-GB')}${imported.manually_edited_after_import ? ' · manually edited since import' : ''}` : '';
     const totals = calculateWageTotals(); wageWeeks.innerHTML = '';
     totals.weeks.forEach((week, index)=>{
       const weekStart = addDays(start, index * 7); const weekEnd = addDays(weekStart, 6);
-      const card = document.createElement('article'); card.className = `wage-card week-colour-${index + 1}`;
+      const card = document.createElement('article'); card.className = `wage-card week-colour-${index + 1}${expandedWageWeeks.has(index) ? ' expanded' : ''}`;
       const weekNumber = wageWeekNumber(weekStart);
-      card.innerHTML = `<div class="wage-week-head"><div><h3>Week ${weekNumber}</h3><div class="wage-cycle-sub">w/c ${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} · ${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div></div><div class="wage-week-total">${formatMoney(week.gross)}</div></div><div class="wage-fields"><label class="wage-field"><span>Basic hours</span><input data-index="${index}" data-key="basicHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.basicHours}"></label><label class="wage-field"><span>Basic minutes</span><input data-index="${index}" data-key="basicMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.basicMinutes}"></label><label class="wage-field"><span>Night premium hours</span><input data-index="${index}" data-key="nightHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.nightHours}"></label><label class="wage-field"><span>Night premium minutes</span><input data-index="${index}" data-key="nightMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.nightMinutes}"></label></div><div class="wage-results"><div>Basic pay<strong>${formatMoney(week.basicPay)}</strong></div><div>Night premium<strong>${formatMoney(week.nightPremium)}</strong></div><div>Week gross<strong>${formatMoney(week.gross)}</strong></div></div>`;
+      const previewMatchesPayday = availableRotaPreview && String(availableRotaPreview.payday) === String(currentWagePayday);
+      const rotaWeek = previewMatchesPayday ? availableRotaPreview.weeks[index] : null;
+      // The backend assigns shifts to payroll weeks, so use that assignment
+      // rather than trying to reconstruct it from date strings in the browser.
+      const hasRotaData = Number(rotaWeek?.shift_count || 0) > 0;
+      card.innerHTML = `<div class="wage-week-head" role="button" tabindex="0" aria-expanded="${expandedWageWeeks.has(index)}"><div><h3>Week ${weekNumber}</h3></div><div class="wage-week-actions">${hasRotaData ? `<button class="primary week-import" type="button">${imported ? 'Re-import' : 'Import'} rota</button>` : ''}<div class="wage-week-total">${formatMoney(week.gross)}</div><span class="wage-week-toggle">⌄</span></div></div><div class="wage-week-body" ${expandedWageWeeks.has(index) ? '' : 'hidden'}><div class="wage-cycle-sub">w/c ${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} · ${weekStart.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${weekEnd.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div><div class="wage-fields"><label class="wage-field"><span>Basic hours</span><input data-index="${index}" data-key="basicHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.basicHours}"></label><label class="wage-field"><span>Basic minutes</span><input data-index="${index}" data-key="basicMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.basicMinutes}"></label><label class="wage-field"><span>Night premium hours</span><input data-index="${index}" data-key="nightHours" type="number" min="0" step="0.01" inputmode="decimal" value="${week.nightHours}"></label><label class="wage-field"><span>Night premium minutes</span><input data-index="${index}" data-key="nightMinutes" type="number" min="0" max="59" step="1" inputmode="numeric" value="${week.nightMinutes}"></label></div><div class="wage-results"><div>Basic pay<strong>${formatMoney(week.basicPay)}</strong></div><div>Night premium<strong>${formatMoney(week.nightPremium)}</strong></div><div>Week gross<strong>${formatMoney(week.gross)}</strong></div></div></div>`;
+      const toggleWeek=()=>{ expandedWageWeeks.has(index) ? expandedWageWeeks.delete(index) : expandedWageWeeks.add(index); renderWages(); };
+      card.querySelector('.wage-week-head').onclick=e=>{ if(!e.target.closest('.week-import')) toggleWeek(); };
+      card.querySelector('.wage-week-head').onkeydown=e=>{ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggleWeek(); } };
+      const weekImport = card.querySelector('.week-import'); if(weekImport) weekImport.onclick=e=>{ e.stopPropagation(); renderRotaPreview(availableRotaPreview,index); };
       card.querySelectorAll('input').forEach(input=>input.onchange=e=>{ const i=Number(e.target.dataset.index); const key=e.target.dataset.key; cycle.weeks[i][key] = key.includes('Minutes') ? clampMinutes(e.target.value) : clampNumber(e.target.value, 0); if(cycle.rotaImport) cycle.rotaImport.manually_edited_after_import=true; apiSave(); renderWages(); updateSummary(); });
       wageWeeks.appendChild(card);
     });
@@ -1028,12 +1044,14 @@
   }
 
   function setView(view){
+    const openingWages = view === 'wages' && activeView !== 'wages';
     activeView=view; document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
     document.querySelectorAll('.app-view').forEach(v=>v.hidden=true);
     document.querySelectorAll('.overview-view').forEach(v=>v.hidden = view !== 'overview');
     document.querySelector('.floating-summary').hidden = !['overview','wages'].includes(view);
     ['calendar','history','wages','settings'].forEach(v=>{ const el=document.getElementById(`${v}View`); if(el) el.hidden = view !== v; });
     updateSummary();
+    if(openingWages) requestRotaPreview(null, true);
   }
 
   prevMonth.onclick = ()=>{ const p=sortedPaydays(); const i=p.indexOf(currentPayday); currentPayday=p[Math.max(0,i-1)] || currentPayday; currentWagePayday=currentPayday; render(); };
@@ -1044,7 +1062,6 @@
   addRecurring.onclick = ()=>{ const name=recName.value.trim(); if(!name) return; const icon=recIcon.value.trim() || companyIconFor(name); state.recurringPayments.push({id:crypto.randomUUID?.() || String(Date.now()), name, icon, amount:Number(recAmount.value||0), day:Math.max(1,Math.min(31,Number(recDay.value||1))), active:true}); recName.value=recIcon.value=recAmount.value=recDay.value=''; syncFutureRecurringPayments(); apiSave(); render(); };
   saveSettings.onclick = ()=>{ state.settings.paydays = paydaysInput.value.split(/\s+/).filter(Boolean).sort(); state.settings.dailyFoodAmount = parseMoney(dailyFoodAmount.value); state.settings.dailyPetrolAmount = parseMoney(dailyPetrolAmount.value); currentPayday = nearestPayday(); currentWagePayday = currentPayday; syncFutureRecurringPayments(); syncAutomaticPayments(); apiSave(); render(); };
   [wageHourlyRate,wagePayePercent,wageNiPercent,wageFixedDeductions].forEach(input=>input.onchange=e=>{ const map={wageHourlyRate:'hourlyRate',wagePayePercent:'payePercent',wageNiPercent:'niPercent',wageFixedDeductions:'fixedDeductions'}; const key=map[e.target.id]; state.wageForecast.settings[key] = key.includes('Percent') ? clampNumber(e.target.value,0,100) : clampNumber(e.target.value,0); apiSave(); renderWages(); updateSummary(); });
-  importRota.onclick=requestRotaPreview;
   testRota.onclick=async()=>{ testRota.disabled=true; rotaStatus.textContent='Testing Rota Importer connection…'; try{ const response=await fetch('api/wages/rota-status'); const status=await response.json(); rotaStatus.textContent=status.endpoint_reachable ? `Connected to ${status.resolved_hostname}:${status.port}.` : `Connection failed (${status.error || 'unavailable'}).`; }catch(error){ rotaStatus.textContent=`Connection test failed: ${error.message}`; }finally{ testRota.disabled=false; } };
   restoreRota.onclick=async()=>{ const cycle=ensureWageForecast(); const previous=cycle.rotaImport?.pre_import_values; if(!previous) return; previous.forEach((values,index)=>Object.assign(cycle.weeks[index], values)); delete cycle.rotaImport; rotaPreview.hidden=true; await apiSave(); renderWages(); };
   openSettings.onclick = ()=>{ setView('settings'); };

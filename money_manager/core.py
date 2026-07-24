@@ -233,7 +233,7 @@ def build_rota_preview(payday_value: str, shifts: list[dict[str, Any]]) -> dict[
     weeks = payroll_weeks(payday_value)
     range_start = date.fromisoformat(weeks[0]["start_date"])
     range_end = date.fromisoformat(weeks[-1]["end_date"])
-    grouped = [{**week, "basic_minutes": 0, "night_minutes": 0} for week in weeks]
+    grouped = [{**week, "basic_minutes": 0, "night_minutes": 0, "shift_count": 0} for week in weeks]
     preview_shifts, source_ids = [], []
     if not isinstance(shifts, list):
         raise ValueError("Rota Importer response must contain a shifts list")
@@ -257,7 +257,11 @@ def build_rota_preview(payday_value: str, shifts: list[dict[str, Any]]) -> dict[
         gross_minutes = int((finish - start).total_seconds() // 60)
         if gross_minutes <= 0 or gross_minutes > 1440:
             raise ValueError("Rota Importer shift duration is invalid")
-        break_value = raw.get("unpaid_break_minutes", raw.get("break_minutes", 0))
+        supplied_break = raw.get("unpaid_break_minutes", raw.get("break_minutes"))
+        # Rota Importer does not always include the standard unpaid break.  A
+        # shift longer than 7 hours 15 minutes attracts a 30 minute deduction,
+        # but an explicitly supplied break remains authoritative.
+        break_value = 30 if supplied_break is None and gross_minutes > 435 else (supplied_break or 0)
         if isinstance(break_value, bool) or not isinstance(break_value, (int, float)) or int(break_value) != break_value:
             raise ValueError("Rota Importer shift has invalid unpaid break minutes")
         break_minutes = int(break_value)
@@ -272,6 +276,7 @@ def build_rota_preview(payday_value: str, shifts: list[dict[str, Any]]) -> dict[
         week_index = (shift_date - range_start).days // 7
         grouped[week_index]["basic_minutes"] += paid_minutes
         grouped[week_index]["night_minutes"] += night_minutes
+        grouped[week_index]["shift_count"] += 1
         source_ids.append(shift_id)
         preview_shifts.append({"id": shift_id, "date": shift_date.isoformat(), "start": start.strftime("%H:%M"), "finish": finish.strftime("%H:%M"), "gross_minutes": gross_minutes, "unpaid_break_minutes": break_minutes, "paid_minutes": paid_minutes, "night_minutes": night_minutes, "warning": warning})
     return {"payday": payday_value, "requested_range": {"start_date": range_start.isoformat(), "end_date": range_end.isoformat()}, "weeks": grouped, "shifts": preview_shifts, "source_shift_ids": source_ids}
