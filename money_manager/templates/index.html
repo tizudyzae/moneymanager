@@ -1050,6 +1050,13 @@
     document.querySelectorAll('.overview-view').forEach(v=>v.hidden = view !== 'overview');
     document.querySelector('.floating-summary').hidden = !['overview','wages'].includes(view);
     ['calendar','history','wages','settings'].forEach(v=>{ const el=document.getElementById(`${v}View`); if(el) el.hidden = view !== v; });
+    if(openingWages){
+      // Forecast the pay currently being earned, rather than the payday that
+      // has just passed. For example, after 23 July this selects 20 August,
+      // whose rota cycle contains weeks 40 and 41.
+      const upcomingPayday=nextPaydayAfterToday();
+      if(upcomingPayday && upcomingPayday !== currentPayday){ currentPayday=upcomingPayday; currentWagePayday=upcomingPayday; availableRotaPreview=null; render(); }
+    }
     updateSummary();
     if(openingWages) requestRotaPreview(null, true);
   }
