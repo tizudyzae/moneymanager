@@ -257,7 +257,11 @@ def build_rota_preview(payday_value: str, shifts: list[dict[str, Any]]) -> dict[
         gross_minutes = int((finish - start).total_seconds() // 60)
         if gross_minutes <= 0 or gross_minutes > 1440:
             raise ValueError("Rota Importer shift duration is invalid")
-        break_value = raw.get("unpaid_break_minutes", raw.get("break_minutes", 0))
+        supplied_break = raw.get("unpaid_break_minutes", raw.get("break_minutes"))
+        # Rota Importer does not always include the standard unpaid break.  A
+        # shift longer than 7 hours 15 minutes attracts a 30 minute deduction,
+        # but an explicitly supplied break remains authoritative.
+        break_value = 30 if supplied_break is None and gross_minutes > 435 else (supplied_break or 0)
         if isinstance(break_value, bool) or not isinstance(break_value, (int, float)) or int(break_value) != break_value:
             raise ValueError("Rota Importer shift has invalid unpaid break minutes")
         break_minutes = int(break_value)
