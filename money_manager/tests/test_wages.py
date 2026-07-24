@@ -104,3 +104,24 @@ def test_rota_preview_handles_overnight_shift_and_additive_night_premium():
     assert preview["weeks"][0]["basic_minutes"] == 510
     assert preview["weeks"][0]["night_minutes"] == 480
     assert shift["warning"]
+
+
+def test_rota_preview_applies_standard_break_to_long_shift_when_break_is_missing():
+    preview = money_core.build_rota_preview("2026-07-23", [
+        {"id": "long", "date": "2026-06-14", "start": "09:00", "finish": "17:00"},
+        {"id": "short", "date": "2026-06-15", "start": "09:00", "finish": "16:15"},
+    ])
+
+    assert preview["shifts"][0]["unpaid_break_minutes"] == 30
+    assert preview["shifts"][0]["paid_minutes"] == 450
+    assert preview["shifts"][1]["unpaid_break_minutes"] == 0
+    assert preview["weeks"][0]["basic_minutes"] == 885
+
+
+def test_rota_preview_preserves_explicit_break_for_long_shift():
+    preview = money_core.build_rota_preview("2026-07-23", [
+        {"id": "long", "date": "2026-06-14", "start": "09:00", "finish": "17:00", "break_minutes": 45},
+    ])
+
+    assert preview["shifts"][0]["unpaid_break_minutes"] == 45
+    assert preview["shifts"][0]["paid_minutes"] == 435
